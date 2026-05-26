@@ -1,0 +1,75 @@
+name: nook-infra
+
+services:
+
+  postgres:
+    image: postgres:latest
+    container_name: nook-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nook
+      POSTGRES_USER: nook
+      POSTGRES_PASSWORD: nook123
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:8.6
+    container_name: nook-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "redis123", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  nacos:
+    image: nacos/nacos-server:latest
+    container_name: nook-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN: SecretKey012345678901234567890123456789012345678901234567890123456789
+      NACOS_AUTH_IDENTITY_KEY: nacos
+      NACOS_AUTH_IDENTITY_VALUE: nacos
+      JVM_XMS: 512m
+      JVM_XMX: 512m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: nook-rmq-namesrv
+    restart: unless-stopped
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: nook-rmq-broker
+    restart: unless-stopped
+    depends_on:
+      - rocketmq-namesrv
+    command: sh mqbroker -n nook-rmq-namesrv:9876 --enable-proxy
+    environment:
+      NAMESRV_ADDR: nook-rmq-namesrv:9876
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "18081:8081"  # gRPC proxy（避开 nook-auth 的 8081）
+
+volumes:
+  pg-data:
+  redis-data:
+  nacos-data:
+  nacos-logs:

@@ -1,0 +1,69 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: nook-gateway
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 3s
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+        username: nacos
+        password: nacos
+      config:
+        server-addr: localhost:8848
+        namespace: public
+        username: nacos
+        password: nacos
+        file-extension: yml
+        import-check:
+          enabled: false
+
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false           # 关闭"按服务名自动建路由"，走显式配置
+          routes:
+            - id: auth
+              uri: lb://nook-auth
+              predicates:
+                - Path=/auth/**
+            - id: user
+              uri: lb://nook-user
+              predicates:
+                - Path=/user/**
+            - id: im
+              uri: lb://nook-im
+              predicates:
+                - Path=/im/**
+            - id: ai
+              uri: lb://nook-ai
+              predicates:
+                - Path=/ai/**
+
+nook:
+  jwt:
+    # 必须和 nook-auth 一致
+    secret: change-me-please-this-must-be-at-least-32-bytes-long-secret
+  gateway:
+    # 不需要 JWT 校验的路径前缀（注册、登录、健康检查）
+    whitelist:
+      - /auth/register
+      - /auth/login
+      - /actuator/**
+
+logging:
+  level:
+    com.lynn.nook: DEBUG

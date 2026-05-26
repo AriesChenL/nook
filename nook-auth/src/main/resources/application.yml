@@ -1,0 +1,49 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: nook-auth
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nook
+    username: nook
+    password: nook123
+    driver-class-name: org.postgresql.Driver
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 3s
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+        username: nacos
+        password: nacos
+      config:
+        server-addr: localhost:8848
+        namespace: public
+        username: nacos
+        password: nacos
+        file-extension: yml
+        import-check:
+          enabled: false
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+
+nook:
+  jwt:
+    secret: change-me-please-this-must-be-at-least-32-bytes-long-secret
+    expire-minutes: 1440
+
+logging:
+  level:
+    com.lynn.nook: DEBUG
