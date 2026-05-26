@@ -14,7 +14,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pg-data:/var/lib/postgresql/data
+      - pg-data:/var/lib/postgresql
       - ./sql:/docker-entrypoint-initdb.d:ro
 
   redis:
@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
     environment:
       MODE: standalone
-      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_ENABLE: "false"
       NACOS_AUTH_TOKEN: SecretKey012345678901234567890123456789012345678901234567890123456789
       NACOS_AUTH_IDENTITY_KEY: nacos
       NACOS_AUTH_IDENTITY_VALUE: nacos
@@ -47,7 +47,7 @@ services:
       - nacos-logs:/home/nacos/logs
 
   rocketmq-namesrv:
-    image: apache/rocketmq:5.3.1
+    image: apache/rocketmq:latest
     container_name: nook-rmq-namesrv
     restart: unless-stopped
     command: sh mqnamesrv
@@ -55,7 +55,7 @@ services:
       - "9876:9876"
 
   rocketmq-broker:
-    image: apache/rocketmq:5.3.1
+    image: apache/rocketmq:latest
     container_name: nook-rmq-broker
     restart: unless-stopped
     depends_on:

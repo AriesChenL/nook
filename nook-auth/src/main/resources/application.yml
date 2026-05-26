@@ -23,14 +23,8 @@ spring:
     nacos:
       discovery:
         server-addr: localhost:8848
-        namespace: public
-        username: nacos
-        password: nacos
       config:
         server-addr: localhost:8848
-        namespace: public
-        username: nacos
-        password: nacos
         file-extension: yml
         import-check:
           enabled: false
