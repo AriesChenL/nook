@@ -4,3 +4,35 @@ server:
 spring:
   application:
     name: nook-user
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nook
+    username: nook
+    password: nook123
+    driver-class-name: org.postgresql.Driver
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 3s
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yml
+        import-check:
+          enabled: false
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+
+logging:
+  level:
+    com.lynn.nook: DEBUG

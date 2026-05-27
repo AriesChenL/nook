@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nook">
+  <title>Nook</title>
+  <defs>
+    <linearGradient id="nookBg" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F766E"/>
+      <stop offset="55%" stop-color="#14B8A6"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+    <linearGradient id="nookSpark" x1="22" y1="22" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#FB923C"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#nookBg)"/>
+  <path d="M24 16 H46 Q52 16 52 22 V36 Q52 42 46 42 H36 L30 48 V42 H24 Q18 42 18 36 V22 Q18 16 24 16 Z" fill="#FFFFFF"/>
+  <path d="M32 22.5 L34.4 28.6 L40.5 31 L34.4 33.4 L32 39.5 L29.6 33.4 L23.5 31 L29.6 28.6 Z" fill="url(#nookSpark)"/>
+</svg>

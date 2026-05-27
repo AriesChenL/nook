@@ -4,3 +4,47 @@ server:
 spring:
   application:
     name: nook-im
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nook
+    username: nook
+    password: nook123
+    driver-class-name: org.postgresql.Driver
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 3s
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yml
+        import-check:
+          enabled: false
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+
+# RocketMQ：默认关闭，单机开发不需要 broker；多实例部署改为 true。
+nook:
+  im:
+    mq:
+      enabled: false
+
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: nook-im-producer
+    send-message-timeout: 3000
+
+logging:
+  level:
+    com.lynn.nook: DEBUG

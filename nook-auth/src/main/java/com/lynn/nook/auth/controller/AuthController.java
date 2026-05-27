@@ -1,17 +1,16 @@
 package com.lynn.nook.auth.controller;
 
+import com.lynn.nook.auth.dto.ChangePasswordRequest;
 import com.lynn.nook.auth.dto.LoginRequest;
 import com.lynn.nook.auth.dto.LoginResponse;
+import com.lynn.nook.auth.dto.MeResponse;
 import com.lynn.nook.auth.dto.RegisterRequest;
 import com.lynn.nook.auth.service.AuthService;
+import com.lynn.nook.common.constant.RequestHeaders;
 import com.lynn.nook.common.result.Result;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -37,6 +36,21 @@ public class AuthController {
         if (auth != null && auth.startsWith(BEARER_PREFIX)) {
             authService.logout(auth.substring(BEARER_PREFIX.length()));
         }
+        return Result.ok();
+    }
+
+    @GetMapping("/me")
+    public Result<MeResponse> me(@RequestHeader(RequestHeaders.USER_ID) Long userId) {
+        return Result.ok(authService.me(userId));
+    }
+
+    @PostMapping("/change-password")
+    public Result<Void> changePassword(@RequestHeader(RequestHeaders.USER_ID) Long userId,
+                                       @RequestHeader(value = "Authorization", required = false) String auth,
+                                       @RequestBody @Valid ChangePasswordRequest req) {
+        String token = (auth != null && auth.startsWith(BEARER_PREFIX))
+                ? auth.substring(BEARER_PREFIX.length()) : null;
+        authService.changePassword(userId, token, req);
         return Result.ok();
     }
 }

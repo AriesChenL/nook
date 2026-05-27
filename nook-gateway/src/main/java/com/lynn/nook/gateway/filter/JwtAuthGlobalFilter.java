@@ -1,6 +1,7 @@
 package com.lynn.nook.gateway.filter;
 
 import com.lynn.nook.common.constant.CacheKeys;
+import com.lynn.nook.common.constant.RequestHeaders;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.common.security.JwtUtil;
 import com.lynn.nook.gateway.config.GatewayProperties;
@@ -14,6 +15,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -31,8 +33,8 @@ import java.nio.charset.StandardCharsets;
 public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String HDR_USER_ID = "X-User-Id";
-    private static final String HDR_USERNAME = "X-Username";
+    private static final String HDR_USER_ID = RequestHeaders.USER_ID;
+    private static final String HDR_USERNAME = RequestHeaders.USERNAME;
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private final GatewayProperties props;
@@ -43,15 +45,19 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
+        // CORS 预检请求无 Authorization 头，直接放行
+        if (HttpMethod.OPTIONS.equals(request.getMethod())) {
+            return chain.filter(exchange);
+        }
         if (isWhitelisted(path)) {
             return chain.filter(exchange);
         }
 
-        String auth = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (auth == null || !auth.startsWith(BEARER_PREFIX)) {
+        // 浏览器 WebSocket 客户端无法设置 Authorization 头，允许走 ?access_token= 兜底
+        String token = extractToken(request);
+        if (token == null) {
             return unauthorized(exchange, ResultCode.UNAUTHORIZED);
         }
-        String token = auth.substring(BEARER_PREFIX.length());
 
         Claims claims;
         try {
@@ -75,6 +81,16 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                             .build();
                     return chain.filter(exchange.mutate().request(mutated).build());
                 });
+    }
+
+    private String extractToken(ServerHttpRequest request) {
+        String auth = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (auth != null && auth.startsWith(BEARER_PREFIX)) {
+            return auth.substring(BEARER_PREFIX.length());
+        }
+        String q = request.getQueryParams().getFirst("access_token");
+        if (q != null && !q.isBlank()) return q;
+        return null;
     }
 
     private boolean isWhitelisted(String path) {

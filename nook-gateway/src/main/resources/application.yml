@@ -29,6 +29,16 @@ spring:
           discovery:
             locator:
               enabled: false           # 关闭"按服务名自动建路由"，走显式配置
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origin-patterns:
+                  - "http://localhost:*"
+                  - "http://127.0.0.1:*"
+                allowed-methods: "*"
+                allowed-headers: "*"
+                allow-credentials: true
+                max-age: 3600
           routes:
             - id: auth
               uri: lb://nook-auth
@@ -57,6 +67,12 @@ nook:
       - /auth/register
       - /auth/login
       - /actuator/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 
 logging:
   level:

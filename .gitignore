@@ -1,6 +1,7 @@
 HELP.md
 target/
 logs/
+*.log
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -32,3 +33,32 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### Editor temp files ###
+*.swp
+*.swo
+*.bak
+*~
+
+### JVM crash dumps ###
+hs_err_pid*
+replay_pid*
+
+### Local secrets / overrides (do not commit) ###
+.env
+.env.local
+.env.*.local
+application-local.yml
+application-local.yaml
+application-*-local.yml
+application-*-local.yaml
+
+### Local notes (do not commit) ###
+PROGRESS.md
+BACKEND_PROGRESS.md
