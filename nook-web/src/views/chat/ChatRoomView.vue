@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { listConversations, listMessages, sendMessage, type Message } from '@/api/im'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getConversation,
+  listMessages,
+  sendMessage,
+  markRead,
+  recallMessage,
+  decodeIncoming,
+  type Message
+} from '@/api/im'
+import { chatSocket } from '@/api/ws'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 const conversationId = computed(() => Number(route.params.id))
 
 const messages = ref<Message[]>([])
@@ -15,21 +26,52 @@ const title = ref('')
 const subtitle = ref('')
 const scroller = ref<HTMLDivElement | null>(null)
 
+const myInitial = computed(() => {
+  const name = auth.user?.nickname || auth.user?.username || '?'
+  return name[0].toUpperCase()
+})
+
+// 消息分组：连续同发送者 + 同分钟 → 合并为一组
+interface GroupedMessage extends Message {
+  isFirst: boolean
+  isLast: boolean
+  showTime: boolean
+}
+
+const grouped = computed<GroupedMessage[]>(() => {
+  return messages.value.map((m, i) => {
+    const prev = i > 0 ? messages.value[i - 1] : null
+    const next = i < messages.value.length - 1 ? messages.value[i + 1] : null
+    const sameSenderAsPrev = prev?.senderId === m.senderId && prev?.createdAt === m.createdAt
+    const sameSenderAsNext = next?.senderId === m.senderId && next?.createdAt === m.createdAt
+    const isFirst = !sameSenderAsPrev
+    const isLast = !sameSenderAsNext
+    // 同组只有首条显示时间；不同组间如果时间变了也显示
+    const showTime = isFirst && (!prev || prev.createdAt !== m.createdAt || prev.senderId !== m.senderId)
+    return { ...m, isFirst, isLast, showTime }
+  })
+})
+
 async function load() {
   loading.value = true
   try {
-    const [convs, msgs] = await Promise.all([
-      listConversations(),
+    const [conv, msgs] = await Promise.all([
+      getConversation(conversationId.value),
       listMessages(conversationId.value)
     ])
-    const c = convs.find((x) => x.id === conversationId.value)
-    title.value = c?.name ?? `会话 #${conversationId.value}`
-    subtitle.value = c?.type === 2 ? `${c.members ?? 0} 位成员` : '在线'
+    title.value = conv?.name ?? `会话 #${conversationId.value}`
+    subtitle.value = conv?.type === 2 ? `${conv.members ?? 0} 位成员` : '在线'
     messages.value = msgs
     await scrollBottom()
+    syncRead()
   } finally {
     loading.value = false
   }
+}
+
+function syncRead() {
+  const last = messages.value[messages.value.length - 1]
+  if (last) markRead(conversationId.value, last.id).catch(() => {})
 }
 
 async function scrollBottom() {
@@ -43,13 +85,32 @@ async function onSend() {
   sending.value = true
   try {
     const msg = await sendMessage(conversationId.value, text)
-    messages.value.push(msg)
+    if (!messages.value.some((m) => m.id === msg.id)) messages.value.push(msg)
     draft.value = ''
     await scrollBottom()
   } catch (e: any) {
     ElMessage.error(e?.message ?? '发送失败')
   } finally {
     sending.value = false
+  }
+}
+
+async function onRecall(m: Message) {
+  try {
+    await ElMessageBox.confirm('撤回这条消息？', '提示', {
+      type: 'warning',
+      confirmButtonText: '撤回',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  try {
+    await recallMessage(m.id)
+    m.recalled = true
+    m.content = '[消息已撤回]'
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '撤回失败')
   }
 }
 
@@ -60,8 +121,40 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+// ───── WebSocket 实时 ─────
+async function onPush(frame: { data?: unknown }) {
+  const raw = frame.data as { conversationId?: number } | undefined
+  if (!raw || raw.conversationId !== conversationId.value) return
+  const msg = await decodeIncoming(raw)
+  if (messages.value.some((m) => m.id === msg.id)) return
+  messages.value.push(msg)
+  await scrollBottom()
+  syncRead()
+}
+
+function onRecallPush(frame: { data?: unknown }) {
+  const d = frame.data as { conversationId?: number; messageId?: number } | undefined
+  if (!d || d.conversationId !== conversationId.value) return
+  const m = messages.value.find((x) => x.id === d.messageId)
+  if (m) {
+    m.recalled = true
+    m.content = '[消息已撤回]'
+  }
+}
+
+let offMessage: (() => void) | null = null
+let offRecall: (() => void) | null = null
+
 watch(conversationId, load)
-onMounted(load)
+onMounted(() => {
+  load()
+  offMessage = chatSocket.on('message', onPush)
+  offRecall = chatSocket.on('recall', onRecallPush)
+})
+onUnmounted(() => {
+  offMessage?.()
+  offRecall?.()
+})
 </script>
 
 <template>
@@ -69,7 +162,10 @@ onMounted(load)
     <header class="room-head">
       <div class="room-title">
         <h3>{{ title }}</h3>
-        <span class="sub">{{ subtitle }}</span>
+        <span class="sub">
+          <span class="online-dot" />
+          {{ subtitle }}
+        </span>
       </div>
       <div class="room-actions">
         <button class="icon-btn" type="button" aria-label="电话">
@@ -84,19 +180,48 @@ onMounted(load)
       </div>
     </header>
 
-    <div ref="scroller" class="messages" :aria-busy="loading || undefined">
+    <div ref="scroller" class="messages" :aria-busy="loading || undefined" role="log" aria-live="polite">
       <el-skeleton v-if="loading" :rows="4" animated />
       <template v-else>
-        <div v-for="m in messages" :key="m.id" :class="['msg', { mine: m.mine }]">
-          <span class="msg-avatar">{{ (m.senderName?.[0] ?? '?').toUpperCase() }}</span>
-          <div class="msg-body">
-            <div class="msg-meta">
-              <span class="msg-name">{{ m.mine ? '我' : m.senderName }}</span>
-              <span class="msg-time">{{ m.createdAt }}</span>
-            </div>
-            <div class="bubble">{{ m.content }}</div>
+        <!-- 时间分隔线 -->
+        <template v-for="m in grouped" :key="m.id">
+          <div v-if="m.showTime && m.isFirst" class="time-divider">
+            <span>{{ m.createdAt }}</span>
           </div>
-        </div>
+          <div :class="['msg', {
+            mine: m.mine,
+            'group-first': m.isFirst,
+            'group-mid': !m.isFirst && !m.isLast,
+            'group-last': !m.isFirst && m.isLast,
+            'group-solo': m.isFirst && m.isLast
+          }]">
+            <!-- 头像：只在组首条显示，否则占位 -->
+            <span v-if="m.isFirst" class="msg-avatar">
+              {{ m.mine ? myInitial : (m.senderName?.[0] ?? '?').toUpperCase() }}
+            </span>
+            <span v-else class="msg-avatar-spacer" />
+
+            <div class="msg-body">
+              <div v-if="m.isFirst" class="msg-meta">
+                <span class="msg-name">{{ m.mine ? auth.displayName : m.senderName }}</span>
+              </div>
+              <div class="bubble-wrap">
+                <div :class="['bubble', { recalled: m.recalled }]">{{ m.content }}</div>
+                <button
+                  v-if="m.mine && !m.recalled"
+                  class="recall-btn"
+                  type="button"
+                  aria-label="撤回消息"
+                  @click="onRecall(m)"
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
       </template>
     </div>
 
@@ -105,13 +230,20 @@ onMounted(load)
         v-model="draft"
         rows="1"
         placeholder="输入消息，Enter 发送 · Shift+Enter 换行"
+        :disabled="sending"
         @keydown="onKeydown"
       />
-      <button class="send-btn" :disabled="!draft.trim() || sending" @click="onSend">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <button
+        class="send-btn"
+        :disabled="!draft.trim() || sending"
+        :aria-busy="sending || undefined"
+        @click="onSend"
+      >
+        <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
-        <span>发送</span>
+        <span v-if="!sending">发送</span>
+        <span v-else class="sending-dot"><i /><i /><i /></span>
       </button>
     </footer>
   </div>
@@ -125,14 +257,16 @@ onMounted(load)
   min-height: 0;
 }
 
+/* ───── Header ───── */
 .room-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 .room-title h3 {
   margin: 0;
@@ -142,8 +276,18 @@ onMounted(load)
   color: var(--nook-text);
 }
 .sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--nook-text-muted);
+}
+.online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 .room-actions {
   display: flex;
@@ -151,8 +295,8 @@ onMounted(load)
 }
 .icon-btn {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   border-radius: 10px;
@@ -160,35 +304,81 @@ onMounted(load)
   background: transparent;
   color: var(--nook-text);
   cursor: pointer;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+  transition: background 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
 }
 .icon-btn:hover {
   background: rgba(20, 184, 166, 0.1);
   border-color: var(--nook-primary);
   color: var(--nook-primary-deep);
 }
+.icon-btn:focus-visible {
+  outline: 2px solid var(--nook-primary);
+  outline-offset: 2px;
+}
 html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 
+/* ───── Messages area ───── */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 24px;
+  padding: 16px 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 2px;
 }
-.messages::-webkit-scrollbar { width: 6px; }
-.messages::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+.messages::-webkit-scrollbar { width: 5px; }
+.messages::-webkit-scrollbar-thumb {
+  background: rgba(20, 184, 166, 0.2);
+  border-radius: 3px;
+}
+.messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 184, 166, 0.35);
+}
 
+/* ───── Time divider ───── */
+.time-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0 6px;
+}
+.time-divider span {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--nook-text-muted);
+  background: rgba(20, 184, 166, 0.06);
+  padding: 3px 12px;
+  border-radius: 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ───── Message row ───── */
 .msg {
   display: flex;
   gap: 10px;
-  max-width: 70%;
+  max-width: 72%;
+  padding: 1px 0;
+  animation: msgIn 200ms ease-out;
 }
 .msg.mine {
   margin-left: auto;
   flex-direction: row-reverse;
 }
+
+/* 组首条增加上间距与其他组分开 */
+.msg.group-first {
+  margin-top: 10px;
+}
+.msg.group-first:first-child,
+.msg.group-first:has(+ .time-divider) {
+  margin-top: 0;
+}
+/* 时间分隔线后的首条不需要额外 margin */
+.time-divider + .msg.group-first {
+  margin-top: 4px;
+}
+
+/* ───── Avatar ───── */
 .msg-avatar {
   flex-shrink: 0;
   display: inline-flex;
@@ -196,17 +386,28 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
   color: #fff;
-  font-weight: 700;
+  font-weight: 600;
   font-family: var(--nook-font-display);
-  font-size: 13px;
+  font-size: 14px;
+  box-shadow: 0 2px 8px -2px rgba(13, 148, 136, 0.3);
+  user-select: none;
 }
+.msg.mine .msg-avatar {
+  background: linear-gradient(135deg, #0f766e, #134e4a);
+}
+.msg-avatar-spacer {
+  flex-shrink: 0;
+  width: 34px;
+}
+
+/* ───── Body ───── */
 .msg-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 .msg.mine .msg-body {
@@ -218,34 +419,120 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   gap: 8px;
   font-size: 11.5px;
   color: var(--nook-text-muted);
+  padding: 0 2px;
 }
-.msg-name { font-weight: 500; }
+.msg-name {
+  font-weight: 500;
+}
+
+/* ───── Bubble ───── */
+.bubble-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.msg.mine .bubble-wrap {
+  flex-direction: row-reverse;
+}
 
 .bubble {
   padding: 10px 14px;
-  border-radius: 16px;
-  background: var(--nook-surface);
-  border: 1px solid var(--nook-surface-border);
   font-size: 14px;
   line-height: 1.55;
   color: var(--nook-text);
   word-break: break-word;
   white-space: pre-wrap;
-}
-.msg.mine .bubble {
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
-  border-color: transparent;
-  color: #fff;
+  background: var(--nook-surface);
+  border: 1px solid var(--nook-surface-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  max-width: 100%;
 }
 
+/* 气泡圆角 — 根据分组位置动态调整，形成对话流 */
+/* 对方消息（左侧）*/
+.msg:not(.mine) .bubble {
+  border-radius: 4px 18px 18px 18px;
+}
+.msg:not(.mine).group-first .bubble {
+  border-radius: 18px 18px 18px 4px;
+}
+.msg:not(.mine).group-mid .bubble {
+  border-radius: 4px 18px 18px 4px;
+}
+.msg:not(.mine).group-last .bubble {
+  border-radius: 4px 18px 18px 18px;
+}
+.msg:not(.mine).group-solo .bubble {
+  border-radius: 18px 18px 18px 4px;
+}
+
+/* 自己消息（右侧）*/
+.msg.mine .bubble {
+  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(15, 118, 110, 0.35);
+  border-radius: 18px 4px 4px 18px;
+}
+.msg.mine.group-first .bubble {
+  border-radius: 18px 18px 4px 18px;
+}
+.msg.mine.group-mid .bubble {
+  border-radius: 18px 4px 4px 18px;
+}
+.msg.mine.group-last .bubble {
+  border-radius: 18px 4px 18px 18px;
+}
+.msg.mine.group-solo .bubble {
+  border-radius: 18px 18px 4px 18px;
+}
+
+.bubble.recalled {
+  font-style: italic;
+  opacity: 0.55;
+  font-size: 13px;
+}
+
+/* ───── Recall button ───── */
+.recall-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--nook-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease-out, color 150ms ease-out, background 150ms ease-out;
+  flex-shrink: 0;
+}
+.msg:hover .recall-btn {
+  opacity: 0.6;
+}
+.msg:hover .recall-btn:hover {
+  opacity: 1;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+.recall-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+/* ───── Composer ───── */
 .composer {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: 12px 18px 16px;
+  padding: 12px 24px 16px;
   border-top: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 .composer textarea {
   flex: 1;
@@ -261,34 +548,88 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   line-height: 1.5;
   color: var(--nook-text);
   outline: none;
-  transition: border-color 180ms ease;
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
 }
 html.dark .composer textarea {
   background: rgba(4, 47, 46, 0.5);
 }
 .composer textarea:focus {
   border-color: var(--nook-primary);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
 }
 .send-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 44px;
-  padding: 0 16px;
+  padding: 0 18px;
   border-radius: 14px;
   border: none;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: filter 180ms ease, transform 180ms ease;
+  transition: filter 200ms ease-out, transform 200ms ease-out, box-shadow 200ms ease-out;
+  box-shadow: 0 2px 10px -3px rgba(20, 184, 166, 0.4);
 }
-.send-btn:hover:not(:disabled) { filter: brightness(1.06); }
-.send-btn:active:not(:disabled) { transform: translateY(1px); }
+.send-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 14px -3px rgba(20, 184, 166, 0.5);
+}
+.send-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.send-btn:focus-visible {
+  outline: 2px solid var(--nook-primary);
+  outline-offset: 2px;
+}
 .send-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+/* ───── Sending indicator ───── */
+.sending-dot {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.sending-dot i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bounce 1s infinite ease-in-out;
+}
+.sending-dot i:nth-child(2) { animation-delay: 0.15s; }
+.sending-dot i:nth-child(3) { animation-delay: 0.3s; }
+
+/* ───── Animations ───── */
+@keyframes msgIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg { animation: none; }
+  .icon-btn,
+  .recall-btn,
+  .send-btn,
+  .composer textarea {
+    transition: none;
+  }
 }
 </style>

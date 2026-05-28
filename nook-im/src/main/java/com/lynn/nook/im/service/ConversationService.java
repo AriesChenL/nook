@@ -111,10 +111,9 @@ public class ConversationService {
 
     private Long findDirectConversationId(Long a, Long b) {
         QueryWrapper qw = QueryWrapper.create()
-                .from("conversations c")
-                .where("c.type = ?", Conversation.TYPE_DIRECT)
-                .and("exists (select 1 from conversation_members m1 where m1.conversation_id = c.id and m1.user_id = ?)", a)
-                .and("exists (select 1 from conversation_members m2 where m2.conversation_id = c.id and m2.user_id = ?)", b)
+                .where("type = ?", Conversation.TYPE_DIRECT)
+                .and("exists (select 1 from conversation_members m1 where m1.conversation_id = conversations.id and m1.user_id = ?)", a)
+                .and("exists (select 1 from conversation_members m2 where m2.conversation_id = conversations.id and m2.user_id = ?)", b)
                 .limit(1);
         Conversation found = conversationMapper.selectOneByQuery(qw);
         return found == null ? null : found.getId();
@@ -133,8 +132,9 @@ public class ConversationService {
 
     private Map<Long, List<Long>> loadMemberIds(List<Long> convIds) {
         if (convIds.isEmpty()) return Map.of();
+        String placeholders = convIds.stream().map(id -> "?").collect(Collectors.joining(","));
         List<ConversationMember> rows = memberMapper.selectListByQuery(QueryWrapper.create()
-                .where("conversation_id in", convIds));
+                .where("conversation_id in (" + placeholders + ")", convIds.toArray()));
         Map<Long, List<Long>> map = new HashMap<>();
         for (ConversationMember m : rows) {
             map.computeIfAbsent(m.getConversationId(), k -> new ArrayList<>()).add(m.getUserId());

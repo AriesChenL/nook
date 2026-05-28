@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api/auth'
+import { chatSocket } from '@/api/ws'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const router = useRouter()
@@ -20,13 +21,17 @@ interface NavItem {
 }
 
 const nav: NavItem[] = [
-  { key: 'chat',     label: '消息',    to: '/chat',     match: (p) => p.startsWith('/chat'),     icon: 'chat',     badge: () => 14 },
-  { key: 'contacts', label: '联系人',  to: '/contacts', match: (p) => p.startsWith('/contacts'), icon: 'contacts', badge: () => 2 },
+  { key: 'chat',     label: '消息',    to: '/chat',     match: (p) => p.startsWith('/chat'),     icon: 'chat' },
+  { key: 'contacts', label: '联系人',  to: '/contacts', match: (p) => p.startsWith('/contacts'), icon: 'contacts' },
   { key: 'ai',       label: 'AI 助手', to: '/ai',       match: (p) => p.startsWith('/ai'),       icon: 'ai' },
   { key: 'profile',  label: '我的',    to: '/profile',  match: (p) => p.startsWith('/profile'),  icon: 'profile' }
 ]
 
 const currentKey = computed(() => nav.find((n) => n.match(route.path))?.key ?? 'chat')
+
+onMounted(() => {
+  if (auth.token) chatSocket.connect(auth.token)
+})
 
 async function onLogout() {
   try {
@@ -43,6 +48,7 @@ async function onLogout() {
   } catch {
     /* 即使失败也清本地 */
   }
+  chatSocket.disconnect()
   auth.clear()
   ElMessage.success('已退出')
   router.replace({ name: 'login' })

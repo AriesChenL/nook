@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listConversations, type Conversation } from '@/api/im'
+import { chatSocket } from '@/api/ws'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,15 +22,53 @@ const activeId = computed(() => {
   return typeof id === 'string' ? Number(id) : null
 })
 
-onMounted(async () => {
+async function reload() {
   try {
     conversations.value = await listConversations()
   } finally {
     loading.value = false
   }
+}
+
+function previewOf(raw: { recalled?: number; contentType?: number; content?: string }): string {
+  if (raw.recalled === 1) return '[消息已撤回]'
+  if (raw.contentType === 2) return '[图片]'
+  if (raw.contentType === 3) return '[文件]'
+  return raw.content ?? ''
+}
+
+function nowHm(): string {
+  return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function onPush(frame: { data?: unknown }) {
+  const raw = frame.data as
+    | { conversationId?: number; recalled?: number; contentType?: number; content?: string }
+    | undefined
+  if (!raw?.conversationId) return
+  const conv = conversations.value.find((c) => c.id === raw.conversationId)
+  if (!conv) {
+    // 新会话：直接整表刷新
+    await reload()
+    return
+  }
+  conv.lastMessage = previewOf(raw)
+  conv.lastMessageAt = nowHm()
+  if (activeId.value !== conv.id) conv.unread += 1
+  // 置顶
+  conversations.value = [conv, ...conversations.value.filter((c) => c.id !== conv.id)]
+}
+
+let offMessage: (() => void) | null = null
+
+onMounted(() => {
+  reload()
+  offMessage = chatSocket.on('message', onPush)
 })
+onUnmounted(() => offMessage?.())
 
 function open(c: Conversation) {
+  c.unread = 0
   router.push({ name: 'chat-room', params: { id: c.id } })
 }
 </script>

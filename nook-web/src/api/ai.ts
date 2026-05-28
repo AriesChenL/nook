@@ -1,9 +1,13 @@
-import { USE_MOCK, mockAiStream, mockAiPresets } from './_mock'
+import { mockAiStream, mockAiPresets } from './_mock'
 
 export const aiPresets = mockAiPresets
 
+// nook-ai 后端尚未实现（仅 Application.java），AI 暂强制走 mock 流式。
+// 后端接好 SSE 后把此开关改回 USE_MOCK 即可。
+const AI_USE_MOCK = true
+
 export async function* chatStream(prompt: string): AsyncGenerator<string> {
-  if (USE_MOCK) {
+  if (AI_USE_MOCK) {
     yield* mockAiStream(prompt)
     return
   }

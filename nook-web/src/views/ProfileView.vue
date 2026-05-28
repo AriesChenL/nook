@@ -1,25 +1,42 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { getMe, updateProfile } from '@/api/user'
 
 const auth = useAuthStore()
 
 const form = reactive({
   nickname: auth.user?.nickname ?? auth.user?.username ?? '',
-  signature: ''
+  email: '',
+  phone: ''
 })
 const saving = ref(false)
+
+onMounted(async () => {
+  try {
+    const me = await getMe()
+    form.nickname = me.nickname || me.username
+    form.email = me.email ?? ''
+    form.phone = me.phone ?? ''
+    if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
+  } catch {
+    /* 拉取失败保留本地缓存 */
+  }
+})
 
 async function onSave() {
   saving.value = true
   try {
-    // TODO: 接 nook-user 的 /user/profile 更新接口
-    await new Promise((r) => setTimeout(r, 400))
-    if (auth.user) {
-      auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
-    }
+    await updateProfile({
+      nickname: form.nickname,
+      email: form.email || undefined,
+      phone: form.phone || undefined
+    })
+    if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
     ElMessage.success('已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
   } finally {
     saving.value = false
   }
@@ -55,8 +72,12 @@ async function onSave() {
           <input id="pf-nickname" v-model="form.nickname" maxlength="32" />
         </div>
         <div class="field">
-          <label for="pf-sig">个性签名</label>
-          <textarea id="pf-sig" v-model="form.signature" rows="2" maxlength="100" placeholder="说点什么吧" />
+          <label for="pf-email">邮箱</label>
+          <input id="pf-email" v-model="form.email" type="email" maxlength="128" placeholder="可选" />
+        </div>
+        <div class="field">
+          <label for="pf-phone">手机号</label>
+          <input id="pf-phone" v-model="form.phone" maxlength="32" placeholder="可选" />
         </div>
         <div class="actions">
           <button class="btn primary" :disabled="saving" @click="onSave">

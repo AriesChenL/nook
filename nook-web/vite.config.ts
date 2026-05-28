@@ -23,6 +23,12 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      // IM WebSocket：网关在 8080 暴露 /im/ws，浏览器用 ?access_token= 握手
+      '/im/ws': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true
       }
     }
   }

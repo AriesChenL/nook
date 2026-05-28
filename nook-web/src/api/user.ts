@@ -8,25 +8,110 @@ import {
   type MockFriendRequest
 } from './_mock'
 
-export type Friend = MockFriend
+// ───── 后端 VO 形状 ─────
+export interface UserVO {
+  id: number
+  username: string
+  nickname: string
+  avatarUrl?: string
+  email?: string
+  phone?: string
+}
+
+interface FriendVO {
+  user: UserVO
+  remark?: string
+  createdAt?: string
+}
+
+interface FriendRequestVO {
+  id: number
+  fromUser: UserVO
+  toUser: UserVO
+  message?: string
+  status: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+// ───── 前端 UI 视图模型 ─────
+export type Friend = MockFriend & { remark?: string }
 export type FriendRequest = MockFriendRequest
 
-export function listFriends() {
+function nameOf(u: UserVO): string {
+  return u.nickname || u.username || `用户${u.id}`
+}
+
+function toFriend(vo: FriendVO): Friend {
+  return {
+    userId: vo.user.id,
+    username: vo.user.username,
+    nickname: nameOf(vo.user),
+    avatarUrl: vo.user.avatarUrl,
+    remark: vo.remark
+  }
+}
+
+function toFriendFromUser(u: UserVO): Friend {
+  return { userId: u.id, username: u.username, nickname: nameOf(u), avatarUrl: u.avatarUrl }
+}
+
+function toFriendRequest(vo: FriendRequestVO): FriendRequest {
+  return {
+    id: vo.id,
+    fromUserId: vo.fromUser.id,
+    fromNickname: nameOf(vo.fromUser),
+    message: vo.message ?? '',
+    status: (vo.status ?? 0) as FriendRequest['status'],
+    createdAt: vo.createdAt ?? ''
+  }
+}
+
+// ───── 当前用户 ─────
+export function getMe() {
+  return http.get<unknown, UserVO>('/user/me')
+}
+
+export interface UpdateProfileRequest {
+  nickname?: string
+  avatarUrl?: string
+  email?: string
+  phone?: string
+}
+
+export function updateProfile(req: UpdateProfileRequest) {
+  return http.put<unknown, UserVO>('/user/me', req)
+}
+
+export function getUser(id: number) {
+  return http.get<unknown, UserVO>(`/user/${id}`)
+}
+
+// ───── 好友 ─────
+export async function listFriends(): Promise<Friend[]> {
   if (USE_MOCK) return delay([...mockFriends])
-  return http.get<unknown, Friend[]>('/user/friends')
+  const vos = await http.get<unknown, FriendVO[]>('/user/friends')
+  return vos.map(toFriend)
 }
 
-export function listFriendRequests() {
+export async function listFriendRequests(): Promise<FriendRequest[]> {
   if (USE_MOCK) return delay([...mockFriendRequests])
-  return http.get<unknown, FriendRequest[]>('/user/friend-requests')
+  const vos = await http.get<unknown, FriendRequestVO[]>('/user/friends/requests/incoming')
+  return vos.map(toFriendRequest)
 }
 
-export function searchUsers(keyword: string) {
+export async function searchUsers(keyword: string): Promise<Friend[]> {
   if (USE_MOCK) {
     const k = keyword.toLowerCase()
     return delay(mockFriends.filter((f) => f.username.includes(k) || f.nickname.toLowerCase().includes(k)))
   }
-  return http.get<unknown, Friend[]>('/user/search', { params: { keyword } })
+  const vos = await http.get<unknown, UserVO[]>('/user/search', { params: { q: keyword } })
+  return vos.map(toFriendFromUser)
+}
+
+export function sendFriendRequest(toUserId: number, message?: string) {
+  if (USE_MOCK) return delay(undefined)
+  return http.post<unknown, FriendRequestVO>('/user/friends/requests', { toUserId, message })
 }
 
 export function acceptFriendRequest(id: number) {
@@ -35,7 +120,7 @@ export function acceptFriendRequest(id: number) {
     if (req) req.status = 1
     return delay(undefined)
   }
-  return http.post<unknown, void>(`/user/friend-requests/${id}/accept`)
+  return http.post<unknown, void>(`/user/friends/requests/${id}/accept`)
 }
 
 export function rejectFriendRequest(id: number) {
@@ -44,5 +129,15 @@ export function rejectFriendRequest(id: number) {
     if (req) req.status = 2
     return delay(undefined)
   }
-  return http.post<unknown, void>(`/user/friend-requests/${id}/reject`)
+  return http.post<unknown, void>(`/user/friends/requests/${id}/reject`)
+}
+
+export function removeFriend(friendUserId: number) {
+  if (USE_MOCK) return delay(undefined)
+  return http.delete<unknown, void>(`/user/friends/${friendUserId}`)
+}
+
+export function updateFriendRemark(friendUserId: number, remark: string) {
+  if (USE_MOCK) return delay(undefined)
+  return http.put<unknown, void>(`/user/friends/${friendUserId}/remark`, { remark })
 }

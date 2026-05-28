@@ -1,6 +1,6 @@
-// 后端 user/im/ai 接口未就绪时启用 mock。
-// 关掉：在 nook-web 根目录加 .env.local 写 VITE_USE_MOCK=false
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+// 后端 user/im 已落地，默认走真实接口（经 vite 代理到网关 8080）。
+// 想用假数据演示：在 nook-web 根目录加 .env.local 写 VITE_USE_MOCK=true
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 export function delay<T>(data: T, ms = 220): Promise<T> {
   return new Promise((r) => setTimeout(() => r(data), ms))

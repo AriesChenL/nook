@@ -44,6 +44,7 @@ public class MessageService {
         m.setSenderId(senderId);
         m.setContentType(req.getContentType() == null ? Message.TYPE_TEXT : req.getContentType());
         m.setContent(req.getContent());
+        m.setRecalled((short) 0);
         m.setCreatedAt(OffsetDateTime.now());
         messageMapper.insert(m);
 

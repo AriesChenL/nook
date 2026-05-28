@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   acceptFriendRequest,
@@ -7,9 +8,13 @@ import {
   listFriends,
   rejectFriendRequest,
   searchUsers,
+  sendFriendRequest,
   type Friend,
   type FriendRequest
 } from '@/api/user'
+import { getOrCreateDirect } from '@/api/im'
+
+const router = useRouter()
 
 type Tab = 'friends' | 'requests' | 'add'
 
@@ -76,6 +81,24 @@ async function onReject(r: FriendRequest) {
   }
 }
 
+async function onAdd(u: Friend) {
+  try {
+    await sendFriendRequest(u.userId)
+    ElMessage.success(`已向 ${u.nickname} 发送好友申请`)
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '申请发送失败')
+  }
+}
+
+async function onMessage(f: Friend) {
+  try {
+    const conv = await getOrCreateDirect(f.userId)
+    router.push({ name: 'chat-room', params: { id: conv.id } })
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '无法发起会话')
+  }
+}
+
 const statusLabel: Record<number, string> = {
   0: '待处理',
   1: '已接受',
@@ -122,7 +145,7 @@ const statusLabel: Record<number, string> = {
               </div>
               <div class="sig">{{ f.signature || `@${f.username}` }}</div>
             </div>
-            <button class="row-btn" type="button">
+            <button class="row-btn" type="button" @click.stop="onMessage(f)">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.5 8.5 0 1 1 21 11.5Z" /></svg>
               发消息
             </button>
@@ -162,7 +185,7 @@ const statusLabel: Record<number, string> = {
             <div class="name">{{ u.nickname }}</div>
             <div class="sig">@{{ u.username }} · {{ u.signature || '暂无签名' }}</div>
           </div>
-          <button class="btn primary">添加</button>
+          <button class="btn primary" @click="onAdd(u)">添加</button>
         </div>
       </div>
     </div>
