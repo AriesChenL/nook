@@ -25,6 +25,12 @@ public class FriendController {
         return Result.ok(friendService.listFriends(userId));
     }
 
+    /** 内部接口：取某用户的好友 userId 列表，供 nook-im 在线状态广播。不读 X-User-Id。 */
+    @GetMapping("/of/{userId}")
+    public Result<List<Long>> friendIdsOf(@PathVariable Long userId) {
+        return Result.ok(friendService.listFriendIds(userId));
+    }
+
     @PostMapping("/requests")
     public Result<FriendRequestVO> send(@RequestHeader(RequestHeaders.USER_ID) Long userId,
                                         @Valid @RequestBody CreateFriendRequest req) {

@@ -47,6 +47,24 @@ public class MessagePushService {
         }
     }
 
+    /** 推送在线状态变更给好友：`{type:"presence", data:{userId, online}}`。 */
+    public int pushPresence(Collection<Long> friendUserIds, Long userId, boolean online) {
+        if (friendUserIds == null || friendUserIds.isEmpty()) return 0;
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "type", "presence",
+                    "data", Map.of(
+                            "userId", userId,
+                            "online", online
+                    )
+            ));
+            return sessionManager.sendToUsers(friendUserIds, payload);
+        } catch (JsonProcessingException e) {
+            log.warn("serialize presence payload failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+
     String toPayload(String type, MessageVO message) {
         try {
             return objectMapper.writeValueAsString(Map.of(

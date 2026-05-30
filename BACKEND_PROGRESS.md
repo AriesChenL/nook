@@ -55,6 +55,7 @@ nook/
 | POST   | `/user/friends/requests/{id}/reject` | 拒绝 |
 | DELETE | `/user/friends/{friendUserId}` | 删好友（双向，幂等） |
 | PUT    | `/user/friends/{friendUserId}/remark` | 改备注 `{remark}` |
+| GET    | `/user/friends/of/{userId}` | 内部接口：某用户好友 userId 列表，供 nook-im 在线状态广播（不读 X-User-Id） |
 
 设计要点：`UserAccount` 实体不含 `password_hash`，nook-user 物理上无法碰密码；好友单向双写，查询零 join。
 
@@ -97,9 +98,10 @@ WebSocket：
 - 握手：`UserIdHandshakeInterceptor` 读 `X-User-Id`（缺/非数字 → 401）
 - 连接后服务端推 `{type:"ready", userId}`
 - 心跳：客户端发 `{"type":"ping"}` → 服务端回 `{type:"pong", ts}`
-- 服务端推送两类事件：
+- 服务端推送事件：
   - `{type:"message", data: MessageVO}`
   - `{type:"recall",  data:{conversationId, messageId}}`
+  - `{type:"presence", data:{userId, online}}` —— 好友上线/下线（见下方"在线状态"）
 - **系统消息**：群成员变更走普通 `message` 事件下发，`MessageVO.contentType=4`，`content` 为结构化 JSON 字符串，前端按 `action` 渲染中文（后端不拼文案、不需昵称）：
   - `{"action":"group_created","operatorId":1}`
   - `{"action":"members_added","operatorId":1,"targetIds":[2,3]}`
@@ -108,12 +110,14 @@ WebSocket：
   - `{"action":"owner_transferred","operatorId":1,"targetId":9}`
   - `{"action":"role_changed","operatorId":1,"targetId":9,"role":2}`
 
-事件流（新消息 / 系统消息 / **撤回** 三类统一走 `MessageEventPublisher`）：
+事件流（新消息 / 系统消息 / **撤回** / **在线状态** 统一走 `MessageEventPublisher`）：
 - `nook.im.mq.enabled=false`（默认）→ `LocalMessageEventPublisher` 进程内直推
 - `nook.im.mq.enabled=true` → `RocketMqMessageEventPublisher` 发 MQ，**BROADCASTING** 消费，每个 nook-im 实例都收到并推本机在线 session
   - 新消息/系统消息 → topic `nook-im-new-message`（`NewMessageEvent`）
   - 撤回 → topic `nook-im-recall`（`RecallEvent`），同会话用 conversationId 分片键与新消息保序
+  - 在线状态 → topic `nook-im-presence`（`PresenceEvent`），userId 分片键
 - 发送/撤回都在 `@Transactional` 内通过 `MessageService.runAfterCommit()`（`afterCommit`）注册，保证事务可见后才推
+- **在线状态**：`ChatWebSocketHandler` 在「首个连接建立」/「最后一个连接断开」时调 `PresenceBroadcastService`，经 OpenFeign 取该用户好友列表（`UserClient.friendIds` → nook-user `/user/friends/of/{userId}`，失败静默跳过），发 `PresenceEvent`，consumer 把 `{type:"presence"}` 推给本机在线好友
 
 ### nook-gateway（端口 8080）
 
@@ -158,28 +162,31 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 
 ---
 
-## 5. 测试覆盖（103 用例全绿）
+## 5. 测试覆盖（116 用例全绿）
 
 | 模块 | 文件 | 用例 |
 |---|---|---:|
 | nook-common | `GlobalExceptionHandlerTest` | 5 |
 | nook-auth | `AuthServiceTest` | 15 |
-| nook-user | `FriendServiceTest` | 13 |
+| nook-user | `FriendServiceTest` | 14 |
 | nook-user | `UserServiceTest` | 2 |
 | nook-im | `ConversationServiceTest` | 18 |
 | nook-im | `MemberQueryServiceTest` | 5 |
 | nook-im | `MessageServiceTest` | 13 |
 | nook-im | `SystemMessageServiceTest` | 3 |
-| nook-im | `MessagePushServiceTest` | 4 |
+| nook-im | `PresenceBroadcastServiceTest` | 4 |
+| nook-im | `MessagePushServiceTest` | 6 |
 | nook-im | `WebSocketSessionManagerTest` | 7 |
-| nook-im | `ChatWebSocketHandlerTest` | 5 |
+| nook-im | `ChatWebSocketHandlerTest` | 6 |
 | nook-im | `UserIdHandshakeInterceptorTest` | 3 |
-| nook-im | `LocalMessageEventPublisherTest` | 4 |
+| nook-im | `LocalMessageEventPublisherTest` | 6 |
 | nook-im | `RocketMqMessageEventConsumerTest` | 2 |
 | nook-im | `RocketMqRecallEventConsumerTest` | 2 |
+| nook-im | `RocketMqPresenceEventConsumerTest` | 2 |
 | nook-im | `NewMessageEventTest` | 1 |
 | nook-im | `RecallEventTest` | 1 |
-| **合计** |  | **103** |
+| nook-im | `PresenceEventTest` | 1 |
+| **合计** |  | **116** |
 
 跑全量：
 ```bash
@@ -217,7 +224,7 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 6. **细节**
    - 头像/图片上传（MinIO 或本地静态目录）
    - ~~消息已读人数（群聊场景）~~ ✅ 2026-05-30：`GET /im/messages/{id}/read-status`（`MessageService.readStatus` + `ConversationService.readersOf`），纯查询，3 个单测
-   - 在线状态推送给好友列表（待做：需 nook-im 跨 nook-user 取好友 + 新 MQ 通道）
+   - ~~在线状态推送给好友列表~~ ✅ 2026-05-30（见 7.7）
    - ~~多端踢出（一处登录踢另一处）~~ ✅ 2026-05-30（见 7.6）
 
 ---
@@ -262,6 +269,17 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 
 ---
 
+## 7.7 2026-05-30 在线状态推送给好友
+
+- nook-user：`FriendService.listFriendIds` + `GET /user/friends/of/{userId}`（内部接口，不读 X-User-Id）。
+- nook-im：新建 `PresenceEvent` + topic `nook-im-presence`；`MessageEventPublisher` 加 `publishPresence`，Local/Rocket 两实现 + `RocketMqPresenceEventConsumer`（BROADCASTING）；`MessagePushService.pushPresence` 推 `{type:"presence",data:{userId,online}}`。
+- `UserClient` 加 `friendIds`；新 `PresenceBroadcastService` 取好友列表（失败静默降级）并发事件。
+- `ChatWebSocketHandler` 在 `sessionCount==1`（首连=上线）/ `==0`（末断=下线）时触发广播，多端登录只在真正上/下线时各播一次。
+- 新增/扩展测试：`PresenceBroadcastServiceTest` 4、`RocketMqPresenceEventConsumerTest` 2、`PresenceEventTest` 1、`MessagePushServiceTest`/`LocalMessageEventPublisherTest`/`ChatWebSocketHandlerTest`/`FriendServiceTest` 各 +1~2。全量 **116 绿**。
+- 局限：仅在状态跳变时推送；新上线用户不会主动收到"哪些好友当前在线"的快照（前端可在连上后调一个聚合接口，或后续加 `presence:snapshot`）。
+
+---
+
 ## 8. 已知开放问题
 
 - **JWT secret 配置统一**：现在每个模块 yml 重复写，应该挪到 Nacos 共享配置
@@ -286,6 +304,8 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 | 撤回时间窗口 | 2 分钟（`MessageService.RECALL_WINDOW`） | 微信式默认 |
 | 群成员变更通知 | content_type=4 系统消息 + JSON body | 复用消息事件流即自动获得多实例 MQ 广播；前端按 action 渲染，后端不拼文案 |
 | 撤回多实例一致 | 独立 `RecallEvent` 通道（非复用 NewMessageEvent 加 type） | 撤回 payload 与消息结构不同，独立 POJO/topic 更清晰；与新消息平行，consumer 各自广播 |
+| 在线状态多实例 | 独立 `PresenceEvent` 通道 + 跨服务取好友 | 好友可能连在任意实例，需 MQ 广播；好友关系在 nook-user，故 Feign 取，失败静默降级（在线状态非关键路径） |
+| 在线状态触发点 | WS 首连/末断的 0↔1 跳变 | 多端登录时只在真正上/下线时广播一次，避免每个连接都打扰好友 |
 | 跨服务取资料 | OpenFeign 直连 `lb://nook-user` + 失败降级 | nook-im 不依赖 nook-user 编译期；资料是锦上添花，挂了不该拖垮成员列表 |
 | 成员资料聚合时机 | 仅 `/members` 端点聚合，列表页不聚合 | 会话列表聚合所有会话所有成员资料会 N+1；列表只需 memberIds |
 
@@ -305,7 +325,9 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 | `nook-im/.../service/ConversationService.java` | 单聊 + 群聊会话/成员管理（建群/加踢/转让/角色） |
 | `nook-im/.../service/SystemMessageService.java` | 群成员变更系统消息（content_type=4），独立于 MessageService 避免循环依赖 |
 | `nook-im/.../service/MemberQueryService.java` | 群成员资料聚合（Feign 调 nook-user，降级安全） |
-| `nook-im/.../client/UserClient.java` | OpenFeign 调 `lb://nook-user` 批量取资料 |
+| `nook-im/.../service/PresenceBroadcastService.java` | 上/下线时取好友并发 PresenceEvent（降级安全） |
+| `nook-im/.../mq/` | 三类事件通道：new-message / recall / presence（Local + Rocket 实现 + 广播 consumer） |
+| `nook-im/.../client/UserClient.java` | OpenFeign 调 `lb://nook-user`：批量资料 + 好友 id |
 | `nook-user/.../UserService.java#listByIds` | `/user/batch` 批量脱敏资料 |
 | `sql/*.sql` | 三套 schema |
 | `nook.bat` | 一键启停基础设施（up/down/status/reset） |

@@ -36,4 +36,14 @@ public class LocalMessageEventPublisher implements MessageEventPublisher {
                     event.getConversationId(), event.getMessageId(), sent);
         }
     }
+
+    @Override
+    public void publishPresence(PresenceEvent event) {
+        if (event == null || event.getUserId() == null) return;
+        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserId(), event.isOnline());
+        if (log.isDebugEnabled()) {
+            log.debug("local presence push: user={}, online={}, delivered={}",
+                    event.getUserId(), event.isOnline(), sent);
+        }
+    }
 }

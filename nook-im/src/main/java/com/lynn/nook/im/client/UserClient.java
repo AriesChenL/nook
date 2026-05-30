@@ -4,6 +4,7 @@ import com.lynn.nook.common.result.Result;
 import com.lynn.nook.im.dto.UserBriefVO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
@@ -17,4 +18,8 @@ public interface UserClient {
 
     @GetMapping("/user/batch")
     Result<List<UserBriefVO>> listByIds(@RequestParam("ids") List<Long> ids);
+
+    /** 取某用户的好友 userId 列表，用于在线状态广播。 */
+    @GetMapping("/user/friends/of/{userId}")
+    Result<List<Long>> friendIds(@PathVariable("userId") Long userId);
 }

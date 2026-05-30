@@ -12,4 +12,7 @@ public interface MessageEventPublisher {
 
     /** 撤回事件：与新消息同样的分发语义（本地直推 / MQ broadcasting）。 */
     void publishRecall(RecallEvent event);
+
+    /** 在线状态事件：通知好友某用户上线/下线（本地直推 / MQ broadcasting）。 */
+    void publishPresence(PresenceEvent event);
 }

@@ -71,4 +71,33 @@ public class RocketMqMessageEventPublisher implements MessageEventPublisher {
             log.warn("mq recall publish error: {}", e.getMessage(), e);
         }
     }
+
+    @Override
+    public void publishPresence(PresenceEvent event) {
+        if (event == null || event.getUserId() == null) return;
+        try {
+            // 用 userId 作分片键，保证同一用户的上/下线事件相对有序
+            rocketMQTemplate.asyncSendOrderly(
+                    MqTopics.PRESENCE,
+                    event,
+                    String.valueOf(event.getUserId()),
+                    new org.apache.rocketmq.client.producer.SendCallback() {
+                        @Override
+                        public void onSuccess(org.apache.rocketmq.client.producer.SendResult sendResult) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("mq presence send ok: msgId={}, queueId={}",
+                                        sendResult.getMsgId(), sendResult.getMessageQueue());
+                            }
+                        }
+                        @Override
+                        public void onException(Throwable e) {
+                            log.warn("mq presence send failed: user={}, err={}",
+                                    event.getUserId(), e.getMessage());
+                        }
+                    }
+            );
+        } catch (Exception e) {
+            log.warn("mq presence publish error: {}", e.getMessage(), e);
+        }
+    }
 }

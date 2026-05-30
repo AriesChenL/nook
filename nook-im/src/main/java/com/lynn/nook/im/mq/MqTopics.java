@@ -9,4 +9,7 @@ public final class MqTopics {
 
     /** 撤回事件：消息被撤回后投递；多实例 broadcasting 消费。 */
     public static final String RECALL = "nook-im-recall";
+
+    /** 在线状态事件：用户上线/下线后投递；多实例 broadcasting 消费。 */
+    public static final String PRESENCE = "nook-im-presence";
 }

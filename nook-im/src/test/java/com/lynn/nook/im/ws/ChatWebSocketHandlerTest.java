@@ -1,6 +1,7 @@
 package com.lynn.nook.im.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lynn.nook.im.service.PresenceBroadcastService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -20,13 +21,15 @@ class ChatWebSocketHandlerTest {
 
     private WebSocketSessionManager sessionManager;
     private PresenceService presenceService;
+    private PresenceBroadcastService presenceBroadcastService;
     private ChatWebSocketHandler handler;
 
     @BeforeEach
     void setUp() {
         sessionManager = mock(WebSocketSessionManager.class);
         presenceService = mock(PresenceService.class);
-        handler = new ChatWebSocketHandler(sessionManager, presenceService, new ObjectMapper());
+        presenceBroadcastService = mock(PresenceBroadcastService.class);
+        handler = new ChatWebSocketHandler(sessionManager, presenceService, presenceBroadcastService, new ObjectMapper());
     }
 
     private WebSocketSession sessionWith(Object userIdAttr) {
@@ -42,16 +45,29 @@ class ChatWebSocketHandlerTest {
     @Test
     void onOpen_registersAndMarksOnlineAndSendsReady() throws Exception {
         WebSocketSession s = sessionWith(42L);
+        when(sessionManager.sessionCount(42L)).thenReturn(1);
 
         handler.afterConnectionEstablished(s);
 
         verify(sessionManager).register(42L, s);
         verify(presenceService).markOnline(42L);
+        verify(presenceBroadcastService).onOnline(42L); // 首个连接 → 广播上线
         ArgumentCaptor<TextMessage> cap = ArgumentCaptor.forClass(TextMessage.class);
         verify(s).sendMessage(cap.capture());
         assertThat(cap.getValue().getPayload())
                 .contains("\"type\":\"ready\"")
                 .contains("\"userId\":42");
+    }
+
+    @Test
+    void onOpen_secondSession_doesNotRebroadcastOnline() throws Exception {
+        WebSocketSession s = sessionWith(42L);
+        when(sessionManager.sessionCount(42L)).thenReturn(2); // 已有一个连接
+
+        handler.afterConnectionEstablished(s);
+
+        verify(presenceService).markOnline(42L);
+        verify(presenceBroadcastService, never()).onOnline(anyLong());
     }
 
     @Test
@@ -80,6 +96,7 @@ class ChatWebSocketHandlerTest {
 
         verify(sessionManager).unregister(7L, s);
         verify(presenceService).markOffline(7L);
+        verify(presenceBroadcastService).onOffline(7L); // 最后一个连接断开 → 广播下线
     }
 
     @Test
@@ -91,5 +108,6 @@ class ChatWebSocketHandlerTest {
 
         verify(sessionManager).unregister(7L, s);
         verify(presenceService, never()).markOffline(anyLong());
+        verify(presenceBroadcastService, never()).onOffline(anyLong());
     }
 }

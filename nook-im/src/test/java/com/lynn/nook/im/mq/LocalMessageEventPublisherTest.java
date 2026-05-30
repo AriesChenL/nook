@@ -63,4 +63,25 @@ class LocalMessageEventPublisherTest {
 
         verifyNoInteractions(pushService);
     }
+
+    @Test
+    void publishPresence_delegatesToPushService() {
+        PresenceEvent event = PresenceEvent.builder()
+                .userId(7L)
+                .online(true)
+                .friendUserIds(List.of(1L, 2L))
+                .build();
+
+        publisher.publishPresence(event);
+
+        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq(7L), eq(true));
+    }
+
+    @Test
+    void publishPresence_ignoresNullEventAndNullUser() {
+        publisher.publishPresence(null);
+        publisher.publishPresence(PresenceEvent.builder().online(true).build());
+
+        verifyNoInteractions(pushService);
+    }
 }
