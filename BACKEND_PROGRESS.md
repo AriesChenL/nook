@@ -71,6 +71,7 @@ REST：
 | POST   | `/im/messages` | 发消息 `{conversationId,contentType?,content}` |
 | GET    | `/im/messages?conversationId=&beforeId=&limit=` | 历史消息（id desc，limit≤100） |
 | POST   | `/im/messages/{id}/recall` | 撤回（仅发送者本人 + 2 分钟内） |
+| GET    | `/im/messages/{id}/read-status` | 已读状态（群聊已读人数）：`{messageId,conversationId,totalRecipients,readCount,readerUserIds}`，发送者不计入 |
 
 群聊管理（2026-05-30 新增，角色 1普通/2管理员/3群主）：
 
@@ -157,7 +158,7 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 
 ---
 
-## 5. 测试覆盖（100 用例全绿）
+## 5. 测试覆盖（103 用例全绿）
 
 | 模块 | 文件 | 用例 |
 |---|---|---:|
@@ -165,9 +166,9 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 | nook-auth | `AuthServiceTest` | 15 |
 | nook-user | `FriendServiceTest` | 13 |
 | nook-user | `UserServiceTest` | 2 |
-| nook-im | `ConversationServiceTest` | 17 |
+| nook-im | `ConversationServiceTest` | 18 |
 | nook-im | `MemberQueryServiceTest` | 5 |
-| nook-im | `MessageServiceTest` | 11 |
+| nook-im | `MessageServiceTest` | 13 |
 | nook-im | `SystemMessageServiceTest` | 3 |
 | nook-im | `MessagePushServiceTest` | 4 |
 | nook-im | `WebSocketSessionManagerTest` | 7 |
@@ -178,7 +179,7 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 | nook-im | `RocketMqRecallEventConsumerTest` | 2 |
 | nook-im | `NewMessageEventTest` | 1 |
 | nook-im | `RecallEventTest` | 1 |
-| **合计** |  | **100** |
+| **合计** |  | **103** |
 
 跑全量：
 ```bash
@@ -215,9 +216,9 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 
 6. **细节**
    - 头像/图片上传（MinIO 或本地静态目录）
-   - 消息已读人数（群聊场景）
-   - 在线状态推送给好友列表
-   - 多端踢出（一处登录踢另一处）
+   - ~~消息已读人数（群聊场景）~~ ✅ 2026-05-30：`GET /im/messages/{id}/read-status`（`MessageService.readStatus` + `ConversationService.readersOf`），纯查询，3 个单测
+   - 在线状态推送给好友列表（待做：需 nook-im 跨 nook-user 取好友 + 新 MQ 通道）
+   - ~~多端踢出（一处登录踢另一处）~~ ✅ 2026-05-30（见 7.6）
 
 ---
 

@@ -3,6 +3,7 @@ package com.lynn.nook.im.service;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.im.dto.MessageVO;
+import com.lynn.nook.im.dto.ReadStatusVO;
 import com.lynn.nook.im.dto.SendMessageRequest;
 import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.MessageMapper;
@@ -89,6 +90,25 @@ public class MessageService {
         return messageMapper.selectListByQuery(qw).stream()
                 .map(MessageVO::from)
                 .toList();
+    }
+
+    /** 消息已读状态（群聊已读人数）：调用方需为会话成员。 */
+    public ReadStatusVO readStatus(Long userId, Long messageId) {
+        Message m = messageMapper.selectOneById(messageId);
+        if (m == null) throw new BusinessException(ResultCode.MESSAGE_NOT_FOUND);
+        conversationService.requireMember(m.getConversationId(), userId);
+
+        List<Long> readers = conversationService.readersOf(m.getConversationId(), messageId, m.getSenderId());
+        int totalRecipients = (int) conversationService.listMemberIds(m.getConversationId()).stream()
+                .filter(id -> !id.equals(m.getSenderId()))
+                .count();
+        return ReadStatusVO.builder()
+                .messageId(messageId)
+                .conversationId(m.getConversationId())
+                .totalRecipients(totalRecipients)
+                .readCount(readers.size())
+                .readerUserIds(readers)
+                .build();
     }
 
     /** 撤回消息：仅发送者本人，且在 RECALL_WINDOW 时间内。 */

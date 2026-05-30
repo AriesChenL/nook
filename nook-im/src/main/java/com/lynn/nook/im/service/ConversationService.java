@@ -391,6 +391,15 @@ public class ConversationService {
         return ms.stream().map(ConversationMember::getUserId).toList();
     }
 
+    /** 已读该消息的成员 userId（last_read_msg_id >= messageId），排除发送者本人。 */
+    public List<Long> readersOf(Long conversationId, Long messageId, Long senderId) {
+        List<ConversationMember> ms = memberMapper.selectListByQuery(QueryWrapper.create()
+                .where("conversation_id = ?", conversationId)
+                .and("user_id <> ?", senderId)
+                .and("last_read_msg_id >= ?", messageId));
+        return ms.stream().map(ConversationMember::getUserId).toList();
+    }
+
     /** MessageService 写完消息后回调，更新 last_message_*。 */
     public void onMessageSent(Long conversationId, Long messageId, OffsetDateTime at) {
         Conversation c = conversationMapper.selectOneById(conversationId);

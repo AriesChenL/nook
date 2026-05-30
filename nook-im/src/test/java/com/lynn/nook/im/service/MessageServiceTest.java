@@ -230,6 +230,34 @@ class MessageServiceTest {
         assertThat(event.getMemberUserIds()).containsExactly(7L, 8L);
     }
 
+    // -------- readStatus --------
+
+    @Test
+    void readStatus_rejectsWhenMessageMissing() {
+        when(messageMapper.selectOneById(5L)).thenReturn(null);
+        assertThatThrownBy(() -> messageService.readStatus(1L, 5L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("code", ResultCode.MESSAGE_NOT_FOUND.getCode());
+    }
+
+    @Test
+    void readStatus_countsReadersExcludingSender() {
+        Message m = new Message();
+        m.setId(50L); m.setConversationId(9L); m.setSenderId(1L);
+        when(messageMapper.selectOneById(50L)).thenReturn(m);
+        // 会话 5 人：发送者 1 + 接收方 2,3,4,5；其中 2,3 已读
+        when(conversationService.readersOf(9L, 50L, 1L)).thenReturn(List.of(2L, 3L));
+        when(conversationService.listMemberIds(9L)).thenReturn(List.of(1L, 2L, 3L, 4L, 5L));
+
+        com.lynn.nook.im.dto.ReadStatusVO vo = messageService.readStatus(8L, 50L);
+
+        verify(conversationService).requireMember(9L, 8L);
+        assertThat(vo.getMessageId()).isEqualTo(50L);
+        assertThat(vo.getTotalRecipients()).isEqualTo(4);   // 5 成员 - 发送者
+        assertThat(vo.getReadCount()).isEqualTo(2);
+        assertThat(vo.getReaderUserIds()).containsExactly(2L, 3L);
+    }
+
     @Test
     void history_appliesQueryAndChecksMembership() {
         when(messageMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of());

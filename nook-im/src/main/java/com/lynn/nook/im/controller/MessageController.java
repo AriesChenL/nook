@@ -3,6 +3,7 @@ package com.lynn.nook.im.controller;
 import com.lynn.nook.common.constant.RequestHeaders;
 import com.lynn.nook.common.result.Result;
 import com.lynn.nook.im.dto.MessageVO;
+import com.lynn.nook.im.dto.ReadStatusVO;
 import com.lynn.nook.im.dto.SendMessageRequest;
 import com.lynn.nook.im.service.MessageService;
 import jakarta.validation.Valid;
@@ -37,5 +38,11 @@ public class MessageController {
                                @PathVariable("id") Long messageId) {
         messageService.recall(userId, messageId);
         return Result.ok();
+    }
+
+    @GetMapping("/{id}/read-status")
+    public Result<ReadStatusVO> readStatus(@RequestHeader(RequestHeaders.USER_ID) Long userId,
+                                           @PathVariable("id") Long messageId) {
+        return Result.ok(messageService.readStatus(userId, messageId));
     }
 }

@@ -333,6 +333,20 @@ class ConversationServiceTest {
         assertThat(bodyCap.getValue()).containsEntry("action", "role_changed");
     }
 
+    // -------- readersOf --------
+
+    @Test
+    void readersOf_mapsMemberUserIds() {
+        when(memberMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(
+                member(5L, 2L, ConversationMember.ROLE_MEMBER),
+                member(5L, 3L, ConversationMember.ROLE_MEMBER)));
+
+        List<Long> readers = service.readersOf(5L, 50L, 1L);
+
+        assertThat(readers).containsExactly(2L, 3L);
+        verify(memberMapper).selectListByQuery(any(QueryWrapper.class));
+    }
+
     @Test
     void setMemberRole_cannotChangeOwner() {
         when(conversationMapper.selectOneById(5L)).thenReturn(group(5L, 1L));
