@@ -55,6 +55,28 @@ class MessagePushServiceTest {
     }
 
     @Test
+    void pushPresence_serializesPresenceEnvelope() {
+        when(sessionManager.sendToUsers(eq(List.of(1L, 2L)), anyString())).thenReturn(2);
+
+        int sent = pushService.pushPresence(List.of(1L, 2L), 7L, true);
+
+        assertThat(sent).isEqualTo(2);
+        ArgumentCaptor<String> cap = ArgumentCaptor.forClass(String.class);
+        verify(sessionManager).sendToUsers(eq(List.of(1L, 2L)), cap.capture());
+        String payload = cap.getValue();
+        assertThat(payload).contains("\"type\":\"presence\"");
+        assertThat(payload).contains("\"userId\":7");
+        assertThat(payload).contains("\"online\":true");
+    }
+
+    @Test
+    void pushPresence_returnsZeroForEmptyFriends() {
+        int n = pushService.pushPresence(List.of(), 7L, true);
+        assertThat(n).isZero();
+        verifyNoInteractions(sessionManager);
+    }
+
+    @Test
     void pushNewMessage_serializesEnvelopeAndDelegatesToManager() {
         MessageVO msg = MessageVO.builder()
                 .id(42L).conversationId(7L).senderId(100L)

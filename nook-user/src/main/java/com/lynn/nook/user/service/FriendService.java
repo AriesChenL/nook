@@ -146,6 +146,14 @@ public class FriendService {
                 .toList();
     }
 
+    /** 某用户的好友 userId 列表（owner_id = userId 的 friend_id）。供 nook-im 在线状态广播用。 */
+    public List<Long> listFriendIds(Long userId) {
+        QueryWrapper qw = QueryWrapper.create().where("owner_id = ?", userId);
+        return friendshipMapper.selectListByQuery(qw).stream()
+                .map(Friendship::getFriendId)
+                .toList();
+    }
+
     // ---------- helpers ----------
 
     private FriendRequest loadPending(Long currentUserId, Long requestId) {

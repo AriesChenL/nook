@@ -23,6 +23,8 @@ public class ConversationVO {
     private Long lastMessageId;
     private OffsetDateTime lastMessageAt;
     private List<Long> memberIds;
+    /** 当前用户在该会话中的角色：1=普通 2=管理员 3=群主（单聊恒为 1） */
+    private Short myRole;
     /** 当前用户在该会话中已读到的最大消息 id */
     private Long lastReadMsgId;
     /** 未读数（消息 id 大于 lastReadMsgId 的条数） */

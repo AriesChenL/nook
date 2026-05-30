@@ -26,4 +26,24 @@ public class LocalMessageEventPublisher implements MessageEventPublisher {
                     sent);
         }
     }
+
+    @Override
+    public void publishRecall(RecallEvent event) {
+        if (event == null || event.getMessageId() == null) return;
+        int sent = pushService.pushRecall(event.getMemberUserIds(), event.getConversationId(), event.getMessageId());
+        if (log.isDebugEnabled()) {
+            log.debug("local recall push: conv={}, msg={}, delivered={}",
+                    event.getConversationId(), event.getMessageId(), sent);
+        }
+    }
+
+    @Override
+    public void publishPresence(PresenceEvent event) {
+        if (event == null || event.getUserId() == null) return;
+        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserId(), event.isOnline());
+        if (log.isDebugEnabled()) {
+            log.debug("local presence push: user={}, online={}, delivered={}",
+                    event.getUserId(), event.isOnline(), sent);
+        }
+    }
 }

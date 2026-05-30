@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -87,8 +88,13 @@ public class GlobalExceptionHandler {
                 .body(Result.fail(ResultCode.METHOD_NOT_ALLOWED));
     }
 
-    @ExceptionHandler(NoHandlerFoundException.class)
-    public ResponseEntity<Result<Void>> handleNotFound(NoHandlerFoundException ex) {
+    /**
+     * 未匹配任何 handler / 静态资源的路径。
+     * Spring Boot 3.2+ 抛 {@link NoResourceFoundException}（旧版是 {@link NoHandlerFoundException}），
+     * 两者都要显式处理，否则会落到下方兜底处理器被当成 500（未知路径本应 404）。
+     */
+    @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+    public ResponseEntity<Result<Void>> handleNotFound(Exception ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Result.fail(ResultCode.NOT_FOUND));
     }

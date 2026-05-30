@@ -7,8 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,6 +58,16 @@ class GlobalExceptionHandlerTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
         assertThat(resp.getBody().getCode()).isEqualTo(ResultCode.METHOD_NOT_ALLOWED.getCode());
+    }
+
+    @Test
+    void noResourceFound_returns404NotFiveHundred() {
+        // Spring Boot 3.2+ 对未知路径抛 NoResourceFoundException，必须当 404 而非落到 500 兜底
+        ResponseEntity<Result<Void>> resp = handler.handleNotFound(
+                new NoResourceFoundException(HttpMethod.GET, "/actuator/health"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(resp.getBody().getCode()).isEqualTo(ResultCode.NOT_FOUND.getCode());
     }
 
     @Test

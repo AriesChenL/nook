@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -64,6 +65,9 @@ public class AuthService {
             throw new BusinessException(ResultCode.PASSWORD_INCORRECT);
         }
 
+        // 多端踢出：单端在线策略——新登录使该用户其它端的 token 立即失效
+        revokeAllTokens(u.getId());
+
         long expireMillis = Duration.ofMinutes(jwtProperties.getExpireMinutes()).toMillis();
         String token = JwtUtil.issue(
                 jwtProperties.getSecret(),
@@ -72,11 +76,9 @@ public class AuthService {
                 Map.of("username", u.getUsername())
         );
 
-        redis.opsForValue().set(
-                CacheKeys.token(token),
-                String.valueOf(u.getId()),
-                Duration.ofMillis(expireMillis)
-        );
+        Duration ttl = Duration.ofMillis(expireMillis);
+        redis.opsForValue().set(CacheKeys.token(token), String.valueOf(u.getId()), ttl);
+        registerToken(u.getId(), token, ttl);
 
         return new LoginResponse(
                 u.getId(), u.getUsername(), u.getNickname(), token, expireMillis / 1000
@@ -84,7 +86,29 @@ public class AuthService {
     }
 
     public void logout(String token) {
+        // 先取 userId 以便从该用户的 token 集合里摘除，再删 token 本身
+        String userId = redis.opsForValue().get(CacheKeys.token(token));
         redis.delete(CacheKeys.token(token));
+        if (userId != null && !userId.isBlank()) {
+            redis.opsForSet().remove(CacheKeys.userTokens(Long.parseLong(userId)), token);
+        }
+    }
+
+    /** 把新 token 登记进该用户的有效 token 集合，并对齐 TTL。 */
+    private void registerToken(Long userId, String token, Duration ttl) {
+        String setKey = CacheKeys.userTokens(userId);
+        redis.opsForSet().add(setKey, token);
+        redis.expire(setKey, ttl);
+    }
+
+    /** 撤销该用户所有现存 token（踢所有端）：删除每个 token 键并清空集合。 */
+    private void revokeAllTokens(Long userId) {
+        String setKey = CacheKeys.userTokens(userId);
+        Set<String> tokens = redis.opsForSet().members(setKey);
+        if (tokens != null && !tokens.isEmpty()) {
+            redis.delete(tokens.stream().map(CacheKeys::token).toList());
+        }
+        redis.delete(setKey);
     }
 
     public MeResponse me(Long userId) {
@@ -102,8 +126,7 @@ public class AuthService {
     }
 
     /**
-     * 改密码后会清除所有现存 token（强制重新登录），调用方负责清本地缓存。
-     * 此处只清除当前请求带的 token；若需踢所有端，需要单独的 token-by-user 索引（后续可加）。
+     * 改密后强制所有端重新登录：撤销该用户全部现存 token（含本端）。调用方负责清本地缓存。
      */
     public void changePassword(Long userId, String currentToken, ChangePasswordRequest req) {
         User u = userMapper.selectOneById(userId);
@@ -117,9 +140,12 @@ public class AuthService {
         u.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
         u.setUpdatedAt(OffsetDateTime.now());
         userMapper.update(u);
+
+        revokeAllTokens(userId);
+        // 集合可能未含当前 token（边界场景），显式再删一次确保本端立即失效
         if (currentToken != null && !currentToken.isBlank()) {
             redis.delete(CacheKeys.token(currentToken));
         }
-        log.info("password changed: userId={}", userId);
+        log.info("password changed, all sessions revoked: userId={}", userId);
     }
 }

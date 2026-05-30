@@ -14,11 +14,13 @@ import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +36,7 @@ class AuthServiceTest {
     private PasswordEncoder passwordEncoder;
     private StringRedisTemplate redis;
     private ValueOperations<String, String> valueOps;
+    private SetOperations<String, String> setOps;
     private JwtProperties jwtProperties;
     private AuthService authService;
 
@@ -44,7 +47,9 @@ class AuthServiceTest {
         passwordEncoder = mock(PasswordEncoder.class);
         redis = mock(StringRedisTemplate.class);
         valueOps = mock(ValueOperations.class);
+        setOps = mock(SetOperations.class);
         when(redis.opsForValue()).thenReturn(valueOps);
+        when(redis.opsForSet()).thenReturn(setOps);
         jwtProperties = new JwtProperties();
         jwtProperties.setSecret("test-secret-must-be-at-least-32-bytes-long-aaaaaaaa");
         jwtProperties.setExpireMinutes(60);
@@ -172,14 +177,52 @@ class AuthServiceTest {
         assertThat(resp.getToken()).isNotBlank();
         assertThat(resp.getExpireSeconds()).isEqualTo(60 * 60L);
         verify(valueOps).set(anyString(), eq("7"), any(Duration.class));
+        // 新 token 登记进该用户的 token 集合并对齐 TTL
+        verify(setOps).add(eq("nook:auth:user-tokens:7"), eq(resp.getToken()));
+        verify(redis).expire(eq("nook:auth:user-tokens:7"), any(Duration.class));
+    }
+
+    @Test
+    void login_kicksPreviousSessions() {
+        User u = new User();
+        u.setId(7L); u.setUsername("alice"); u.setNickname("Ally");
+        u.setPasswordHash("HASH"); u.setStatus((short) 1);
+        when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(u);
+        when(passwordEncoder.matches("secret", "HASH")).thenReturn(true);
+        // 该用户此前在两个端登录过
+        when(setOps.members("nook:auth:user-tokens:7")).thenReturn(Set.of("old-1", "old-2"));
+
+        LoginRequest req = new LoginRequest();
+        req.setUsername("alice"); req.setPassword("secret");
+
+        authService.login(req);
+
+        // 旧 token 全部失效（批量删除）+ 清空集合
+        verify(redis).delete(argThat((java.util.Collection<String> c) ->
+                c.contains("nook:auth:token:old-1") && c.contains("nook:auth:token:old-2")));
+        verify(redis).delete("nook:auth:user-tokens:7");
     }
 
     // -------- logout --------
 
     @Test
-    void logout_deletesTokenInRedis() {
+    void logout_deletesTokenAndRemovesFromUserSet() {
+        when(valueOps.get("nook:auth:token:abc")).thenReturn("7");
+
         authService.logout("abc");
+
         verify(redis).delete("nook:auth:token:abc");
+        verify(setOps).remove("nook:auth:user-tokens:7", "abc");
+    }
+
+    @Test
+    void logout_skipsSetRemovalWhenTokenUnknown() {
+        when(valueOps.get("nook:auth:token:gone")).thenReturn(null);
+
+        authService.logout("gone");
+
+        verify(redis).delete("nook:auth:token:gone");
+        verifyNoInteractions(setOps);
     }
 
     // -------- me --------
@@ -239,7 +282,7 @@ class AuthServiceTest {
     }
 
     @Test
-    void changePassword_updatesHashAndRevokesToken() {
+    void changePassword_updatesHashAndRevokesAllSessions() {
         User u = new User(); u.setId(1L); u.setPasswordHash("OLD"); u.setUsername("alice");
         when(userMapper.selectOneById(1L)).thenReturn(u);
         when(passwordEncoder.matches("old", "OLD")).thenReturn(true);
@@ -254,6 +297,8 @@ class AuthServiceTest {
         ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
         verify(userMapper).update(cap.capture());
         assertThat(cap.getValue().getPasswordHash()).isEqualTo("NEW_HASH");
+        // 踢所有端：清空该用户 token 集合 + 显式删除本端 token
+        verify(redis).delete("nook:auth:user-tokens:1");
         verify(redis).delete("nook:auth:token:tk");
     }
 }

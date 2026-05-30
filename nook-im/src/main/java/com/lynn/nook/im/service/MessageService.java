@@ -3,12 +3,13 @@ package com.lynn.nook.im.service;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.im.dto.MessageVO;
+import com.lynn.nook.im.dto.ReadStatusVO;
 import com.lynn.nook.im.dto.SendMessageRequest;
 import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.MessageMapper;
 import com.lynn.nook.im.mq.MessageEventPublisher;
 import com.lynn.nook.im.mq.NewMessageEvent;
-import com.lynn.nook.im.ws.MessagePushService;
+import com.lynn.nook.im.mq.RecallEvent;
 import com.mybatisflex.core.query.QueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,6 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final MessageEventPublisher eventPublisher;
-    private final MessagePushService pushService;
 
     @Transactional
     public MessageVO send(Long senderId, SendMessageRequest req) {
@@ -56,22 +56,21 @@ public class MessageService {
                 .memberUserIds(conversationService.listMemberIds(req.getConversationId()))
                 .message(vo)
                 .build();
-        publishAfterCommit(event);
+        runAfterCommit(() -> eventPublisher.publishNewMessage(event));
         return vo;
     }
 
-    /** 事务提交后才发事件——避免接收方在事务可见前用 history 拉不到记录。 */
-    private void publishAfterCommit(NewMessageEvent event) {
+    /** 事务提交后才执行——避免接收方在事务可见前用 history 拉不到记录。无事务上下文（如单测）则立即执行。 */
+    private void runAfterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    eventPublisher.publishNewMessage(event);
+                    action.run();
                 }
             });
         } else {
-            // 无事务上下文（如单测中直接调用）：立即发，行为退化为同步
-            eventPublisher.publishNewMessage(event);
+            action.run();
         }
     }
 
@@ -91,6 +90,25 @@ public class MessageService {
         return messageMapper.selectListByQuery(qw).stream()
                 .map(MessageVO::from)
                 .toList();
+    }
+
+    /** 消息已读状态（群聊已读人数）：调用方需为会话成员。 */
+    public ReadStatusVO readStatus(Long userId, Long messageId) {
+        Message m = messageMapper.selectOneById(messageId);
+        if (m == null) throw new BusinessException(ResultCode.MESSAGE_NOT_FOUND);
+        conversationService.requireMember(m.getConversationId(), userId);
+
+        List<Long> readers = conversationService.readersOf(m.getConversationId(), messageId, m.getSenderId());
+        int totalRecipients = (int) conversationService.listMemberIds(m.getConversationId()).stream()
+                .filter(id -> !id.equals(m.getSenderId()))
+                .count();
+        return ReadStatusVO.builder()
+                .messageId(messageId)
+                .conversationId(m.getConversationId())
+                .totalRecipients(totalRecipients)
+                .readCount(readers.size())
+                .readerUserIds(readers)
+                .build();
     }
 
     /** 撤回消息：仅发送者本人，且在 RECALL_WINDOW 时间内。 */
@@ -114,8 +132,12 @@ public class MessageService {
         m.setRecalledAt(now);
         messageMapper.update(m);
 
-        // 推送撤回事件给会话所有在线成员
-        List<Long> members = conversationService.listMemberIds(m.getConversationId());
-        pushService.pushRecall(members, m.getConversationId(), m.getId());
+        // 撤回事件走与新消息一致的发布链路：本地直推或 MQ broadcasting（多实例），事务提交后才发
+        RecallEvent event = RecallEvent.builder()
+                .conversationId(m.getConversationId())
+                .messageId(m.getId())
+                .memberUserIds(conversationService.listMemberIds(m.getConversationId()))
+                .build();
+        runAfterCommit(() -> eventPublisher.publishRecall(event));
     }
 }

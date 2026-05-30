@@ -87,6 +87,20 @@ export function getUser(id: number) {
   return http.get<unknown, UserVO>(`/user/${id}`)
 }
 
+// 批量取公开资料（去重，后端限 200）。供 im 解析群成员/消息发送者名称，避免 N+1。
+export async function getUsersByIds(ids: number[]): Promise<UserVO[]> {
+  const uniq = [...new Set(ids)].filter((id) => id > 0)
+  if (!uniq.length) return []
+  if (USE_MOCK) {
+    return delay(
+      mockFriends
+        .filter((f) => uniq.includes(f.userId))
+        .map((f) => ({ id: f.userId, username: f.username, nickname: f.nickname, avatarUrl: f.avatarUrl }))
+    )
+  }
+  return http.get<unknown, UserVO[]>('/user/batch', { params: { ids: uniq.join(',') } })
+}
+
 // ───── 好友 ─────
 export async function listFriends(): Promise<Friend[]> {
   if (USE_MOCK) return delay([...mockFriends])

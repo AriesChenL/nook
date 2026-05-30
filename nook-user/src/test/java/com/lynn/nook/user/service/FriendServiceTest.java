@@ -43,6 +43,19 @@ class FriendServiceTest {
         return u;
     }
 
+    // -------- listFriendIds --------
+
+    @Test
+    void listFriendIds_mapsFriendIds() {
+        Friendship f1 = new Friendship(); f1.setOwnerId(7L); f1.setFriendId(1L);
+        Friendship f2 = new Friendship(); f2.setOwnerId(7L); f2.setFriendId(2L);
+        when(friendshipMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(f1, f2));
+
+        List<Long> ids = friendService.listFriendIds(7L);
+
+        assertThat(ids).containsExactly(1L, 2L);
+    }
+
     // -------- sendRequest --------
 
     @Test

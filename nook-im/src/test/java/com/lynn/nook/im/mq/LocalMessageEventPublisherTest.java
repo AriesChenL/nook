@@ -42,4 +42,46 @@ class LocalMessageEventPublisherTest {
 
         verifyNoInteractions(pushService);
     }
+
+    @Test
+    void publishRecall_delegatesToPushService() {
+        RecallEvent event = RecallEvent.builder()
+                .conversationId(10L)
+                .messageId(99L)
+                .memberUserIds(List.of(1L, 2L))
+                .build();
+
+        publisher.publishRecall(event);
+
+        verify(pushService).pushRecall(eq(List.of(1L, 2L)), eq(10L), eq(99L));
+    }
+
+    @Test
+    void publishRecall_ignoresNullEventAndNullMessageId() {
+        publisher.publishRecall(null);
+        publisher.publishRecall(RecallEvent.builder().conversationId(1L).build());
+
+        verifyNoInteractions(pushService);
+    }
+
+    @Test
+    void publishPresence_delegatesToPushService() {
+        PresenceEvent event = PresenceEvent.builder()
+                .userId(7L)
+                .online(true)
+                .friendUserIds(List.of(1L, 2L))
+                .build();
+
+        publisher.publishPresence(event);
+
+        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq(7L), eq(true));
+    }
+
+    @Test
+    void publishPresence_ignoresNullEventAndNullUser() {
+        publisher.publishPresence(null);
+        publisher.publishPresence(PresenceEvent.builder().online(true).build());
+
+        verifyNoInteractions(pushService);
+    }
 }

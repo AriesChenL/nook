@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 
 if "%~1"=="" goto menu
@@ -11,15 +10,15 @@ goto menu
 
 :menu
 echo.
-echo  ╔══════════════════════════════════╗
-echo  ║       Nook Infrastructure        ║
-echo  ╠══════════════════════════════════╣
-echo  ║  1. Start   (docker up + SQL)    ║
-echo  ║  2. Stop    (docker down)        ║
-echo  ║  3. Status  (check services)     ║
-echo  ║  4. Reset   (down -v, wipe data) ║
-echo  ║  0. Exit                         ║
-echo  ╚══════════════════════════════════╝
+echo  ==================================
+echo          Nook Infrastructure
+echo  ==================================
+echo    1. Start   (docker up + SQL)
+echo    2. Stop    (docker down)
+echo    3. Status  (check services)
+echo    4. Reset   (down -v, wipe data)
+echo    0. Exit
+echo  ==================================
 echo.
 set /p choice=Select:
 if "%choice%"=="1" goto start
@@ -90,7 +89,7 @@ goto end
 
 :print_status
 echo  Service            Port    Status
-echo  ────────────────   ─────   ──────
+echo  ----------------   -----   ------
 for %%s in (nook-postgres:5432,nook-redis:6379,nook-nacos:8848,nook-rmq-namesrv:9876,nook-rmq-broker:10911) do (
     for /f "tokens=1,2 delims=:" %%a in ("%%s") do (
         for /f "tokens=*" %%r in ('docker inspect -f "{{.State.Status}}" %%a 2^>nul ^|^| echo not-found') do (

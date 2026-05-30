@@ -1,6 +1,7 @@
 package com.lynn.nook.im.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lynn.nook.im.service.PresenceBroadcastService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final WebSocketSessionManager sessionManager;
     private final PresenceService presenceService;
+    private final PresenceBroadcastService presenceBroadcastService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -34,6 +36,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         sessionManager.register(userId, session);
         presenceService.markOnline(userId);
+        // 本用户首个连接 → 上线，广播给好友
+        if (sessionManager.sessionCount(userId) == 1) {
+            presenceBroadcastService.onOnline(userId);
+        }
         sendJson(session, Map.of("type", "ready", "userId", userId));
         log.debug("ws opened: userId={}, sessionId={}", userId, session.getId());
     }
@@ -55,6 +61,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         sessionManager.unregister(userId, session);
         if (sessionManager.sessionCount(userId) == 0) {
             presenceService.markOffline(userId);
+            // 最后一个连接断开 → 下线，广播给好友
+            presenceBroadcastService.onOffline(userId);
         }
         log.debug("ws closed: userId={}, sessionId={}, status={}", userId, session.getId(), status);
     }
