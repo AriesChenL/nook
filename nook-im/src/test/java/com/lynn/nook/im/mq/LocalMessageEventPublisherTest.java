@@ -42,4 +42,25 @@ class LocalMessageEventPublisherTest {
 
         verifyNoInteractions(pushService);
     }
+
+    @Test
+    void publishRecall_delegatesToPushService() {
+        RecallEvent event = RecallEvent.builder()
+                .conversationId(10L)
+                .messageId(99L)
+                .memberUserIds(List.of(1L, 2L))
+                .build();
+
+        publisher.publishRecall(event);
+
+        verify(pushService).pushRecall(eq(List.of(1L, 2L)), eq(10L), eq(99L));
+    }
+
+    @Test
+    void publishRecall_ignoresNullEventAndNullMessageId() {
+        publisher.publishRecall(null);
+        publisher.publishRecall(RecallEvent.builder().conversationId(1L).build());
+
+        verifyNoInteractions(pushService);
+    }
 }

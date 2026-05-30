@@ -9,4 +9,7 @@ package com.lynn.nook.im.mq;
 public interface MessageEventPublisher {
 
     void publishNewMessage(NewMessageEvent event);
+
+    /** 撤回事件：与新消息同样的分发语义（本地直推 / MQ broadcasting）。 */
+    void publishRecall(RecallEvent event);
 }

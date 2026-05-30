@@ -8,7 +8,7 @@ import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.MessageMapper;
 import com.lynn.nook.im.mq.MessageEventPublisher;
 import com.lynn.nook.im.mq.NewMessageEvent;
-import com.lynn.nook.im.ws.MessagePushService;
+import com.lynn.nook.im.mq.RecallEvent;
 import com.mybatisflex.core.query.QueryWrapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +31,6 @@ class MessageServiceTest {
     private MessageMapper messageMapper;
     private ConversationService conversationService;
     private MessageEventPublisher eventPublisher;
-    private MessagePushService pushService;
     private MessageService messageService;
 
     @BeforeEach
@@ -39,8 +38,7 @@ class MessageServiceTest {
         messageMapper = mock(MessageMapper.class);
         conversationService = mock(ConversationService.class);
         eventPublisher = mock(MessageEventPublisher.class);
-        pushService = mock(MessagePushService.class);
-        messageService = new MessageService(messageMapper, conversationService, eventPublisher, pushService);
+        messageService = new MessageService(messageMapper, conversationService, eventPublisher);
     }
 
     @AfterEach
@@ -209,7 +207,7 @@ class MessageServiceTest {
     }
 
     @Test
-    void recall_marksAndPushesEventToMembers() {
+    void recall_marksAndPublishesRecallEventToMembers() {
         Message m = new Message();
         m.setId(99L); m.setSenderId(7L); m.setConversationId(42L);
         m.setCreatedAt(OffsetDateTime.now().minusSeconds(10));
@@ -222,7 +220,14 @@ class MessageServiceTest {
         verify(messageMapper).update(cap.capture());
         assertThat(cap.getValue().getRecalled()).isEqualTo((short) 1);
         assertThat(cap.getValue().getRecalledAt()).isNotNull();
-        verify(pushService).pushRecall(eq(List.of(7L, 8L)), eq(42L), eq(99L));
+
+        // 撤回改走 eventPublisher（无事务上下文 → 立即发），多实例下可经 MQ 广播
+        ArgumentCaptor<RecallEvent> eCap = ArgumentCaptor.forClass(RecallEvent.class);
+        verify(eventPublisher).publishRecall(eCap.capture());
+        RecallEvent event = eCap.getValue();
+        assertThat(event.getConversationId()).isEqualTo(42L);
+        assertThat(event.getMessageId()).isEqualTo(99L);
+        assertThat(event.getMemberUserIds()).containsExactly(7L, 8L);
     }
 
     @Test

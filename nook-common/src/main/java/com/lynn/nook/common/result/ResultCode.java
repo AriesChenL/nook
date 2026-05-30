@@ -35,7 +35,14 @@ public enum ResultCode {
     MESSAGE_NOT_FOUND(3004, "消息不存在"),
     MESSAGE_RECALL_FORBIDDEN(3005, "只能撤回自己发送的消息"),
     MESSAGE_RECALL_EXPIRED(3006, "消息已超过可撤回时间"),
-    MESSAGE_ALREADY_RECALLED(3007, "消息已撤回");
+    MESSAGE_ALREADY_RECALLED(3007, "消息已撤回"),
+
+    CONVERSATION_NOT_GROUP(3008, "该会话不是群聊"),
+    GROUP_PERMISSION_DENIED(3009, "无权进行该群操作"),
+    GROUP_MEMBER_ALREADY(3010, "用户已在群中"),
+    GROUP_MEMBER_NOT_FOUND(3011, "该用户不在群中"),
+    GROUP_OWNER_CANNOT_LEAVE(3012, "群主退群前需先转让群主"),
+    GROUP_ROLE_INVALID(3013, "非法的成员角色");
 
     private final int code;
     private final String message;

@@ -42,4 +42,33 @@ public class RocketMqMessageEventPublisher implements MessageEventPublisher {
             log.warn("mq publish error: {}", e.getMessage(), e);
         }
     }
+
+    @Override
+    public void publishRecall(RecallEvent event) {
+        if (event == null || event.getMessageId() == null) return;
+        try {
+            // 同会话撤回与新消息共用 conversationId 分片键，保证相对顺序
+            rocketMQTemplate.asyncSendOrderly(
+                    MqTopics.RECALL,
+                    event,
+                    String.valueOf(event.getConversationId()),
+                    new org.apache.rocketmq.client.producer.SendCallback() {
+                        @Override
+                        public void onSuccess(org.apache.rocketmq.client.producer.SendResult sendResult) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("mq recall send ok: msgId={}, queueId={}",
+                                        sendResult.getMsgId(), sendResult.getMessageQueue());
+                            }
+                        }
+                        @Override
+                        public void onException(Throwable e) {
+                            log.warn("mq recall send failed: conv={}, err={}",
+                                    event.getConversationId(), e.getMessage());
+                        }
+                    }
+            );
+        } catch (Exception e) {
+            log.warn("mq recall publish error: {}", e.getMessage(), e);
+        }
+    }
 }

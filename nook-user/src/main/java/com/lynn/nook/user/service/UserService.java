@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +45,19 @@ public class UserService {
 
         userMapper.update(u);
         return UserVO.from(u);
+    }
+
+    /** 按 id 批量取公开资料（脱敏）。供 nook-im 等内部服务聚合成员资料用，去重并限量。 */
+    public List<UserVO> listByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        List<Long> distinct = ids.stream().filter(Objects::nonNull).distinct().limit(200).toList();
+        if (distinct.isEmpty()) return List.of();
+        // 手动展开占位符：MyBatis-Flex 的 `in` 直接传 List 会被当作单个参数（见踩坑记录）
+        String placeholders = distinct.stream().map(x -> "?").collect(Collectors.joining(","));
+        QueryWrapper qw = QueryWrapper.create().where("id in (" + placeholders + ")", distinct.toArray());
+        return userMapper.selectListByQuery(qw).stream()
+                .map(UserVO::fromPublic)
+                .toList();
     }
 
     public List<UserVO> search(String keyword, int limit) {
