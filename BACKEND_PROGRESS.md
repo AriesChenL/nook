@@ -30,10 +30,13 @@ nook/
 | Method | Path | 鉴权 | 说明 |
 |---|---|---|---|
 | POST | `/auth/register` | 否 | body `{username,password,nickname?}` → `Long`(userId) |
-| POST | `/auth/login` | 否 | body `{username,password}` → `{userId,username,nickname,token,expireSeconds}` |
-| POST | `/auth/logout` | 是 | 清 Redis token |
+| POST | `/auth/login` | 否 | body `{username,password}` → `{userId,username,nickname,token,expireSeconds}`；**单端在线**：登录会踢掉该用户其它端的 token |
+| POST | `/auth/logout` | 是 | 清 Redis token，并从该用户 token 集合摘除 |
 | GET  | `/auth/me` | 是 | 当前用户完整资料 |
-| POST | `/auth/change-password` | 是 | body `{oldPassword,newPassword}`，改完撤销当前 token |
+| POST | `/auth/change-password` | 是 | body `{oldPassword,newPassword}`，改完**撤销该用户所有端** token |
+
+> **多端踢出（单端在线）**：Redis 维护反向索引 `nook:auth:user-tokens:{userId}`（Set，TTL 对齐 token）。登录时 `revokeAllTokens` 删旧、`registerToken` 登记新；登出从集合摘除；改密撤销全部。被踢端在网关下次校验 token 时拿到 401。
+> **当前局限**：被踢端不会被主动 WS 强制下线（无 force-logout 推送），其已建立的 WebSocket 连接会保持到下次握手/请求才失效。主动踢线需 nook-auth → nook-im 发事件，列为后续。
 
 ### nook-user（端口 8082，路由 `/user/**`）
 
@@ -154,12 +157,12 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 
 ---
 
-## 5. 测试覆盖（98 用例全绿）
+## 5. 测试覆盖（100 用例全绿）
 
 | 模块 | 文件 | 用例 |
 |---|---|---:|
 | nook-common | `GlobalExceptionHandlerTest` | 5 |
-| nook-auth | `AuthServiceTest` | 13 |
+| nook-auth | `AuthServiceTest` | 15 |
 | nook-user | `FriendServiceTest` | 13 |
 | nook-user | `UserServiceTest` | 2 |
 | nook-im | `ConversationServiceTest` | 17 |
@@ -175,7 +178,7 @@ JWT secret 写死在三个 yml 里：`change-me-please-this-must-be-at-least-32-
 | nook-im | `RocketMqRecallEventConsumerTest` | 2 |
 | nook-im | `NewMessageEventTest` | 1 |
 | nook-im | `RecallEventTest` | 1 |
-| **合计** |  | **98** |
+| **合计** |  | **100** |
 
 跑全量：
 ```bash
@@ -248,11 +251,21 @@ JAVA_HOME=D:/Java/jdk-25.0.2 ./mvnw.cmd test
 
 ---
 
+## 7.6 2026-05-30 多端踢出（单端在线）
+
+- nook-common `CacheKeys` 加 `userTokens(userId)` → `nook:auth:user-tokens:{userId}`（Set）。
+- `AuthService`：新增私有 `registerToken` / `revokeAllTokens`；`login` 先 `revokeAllTokens` 踢旧端再登记新 token；`logout` 先用 `valueOps.get(tokenKey)` 取回 userId 再从集合 `SREM`；`changePassword` 改为 `revokeAllTokens`（踢全部端）+ 显式删本端 token。
+- 集合 TTL 用 `redis.expire(setKey, ttl)` 与 token 对齐，避免悬挂键。
+- `AuthServiceTest` 13 → 15：新增 `login_kicksPreviousSessions`、`logout_skipsSetRemovalWhenTokenUnknown`，改造 logout/changePassword 两例；setUp 加 `SetOperations` mock。
+- 局限：被踢端无主动 WS force-logout，靠网关下次校验 401。后续如需即时踢线，可由 nook-auth 发事件给 nook-im 关闭对应 session。
+
+---
+
 ## 8. 已知开放问题
 
 - **JWT secret 配置统一**：现在每个模块 yml 重复写，应该挪到 Nacos 共享配置
 - **消息分表**：单表 `messages` 在量大时要分表/换 MongoDB
-- **多端踢出**：同一用户多端登录的 token 管理，目前没有 token-by-user 索引
+- ~~**多端踢出**~~ ✅ 2026-05-30 解决：Redis 反向索引 `user-tokens:{userId}`，登录踢旧端、改密踢全部。遗留：被踢端无主动 WS force-logout（见 nook-auth API 注）。
 - **离线推送**：未在线用户的消息只能下次拉历史，无主动推送（APNs/FCM）
 - ~~**撤回事件的 MQ 广播**~~ ✅ 2026-05-30 解决：新建 `RecallEvent` 通道（topic `nook-im-recall`，BROADCASTING），撤回与新消息/系统消息走同一套 `MessageEventPublisher`，多实例一致。
 
