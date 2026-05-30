@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getConversation,
@@ -8,13 +8,18 @@ import {
   sendMessage,
   markRead,
   recallMessage,
+  getReadStatus,
   decodeIncoming,
+  type Conversation,
   type Message
 } from '@/api/im'
 import { chatSocket } from '@/api/ws'
 import { useAuthStore } from '@/stores/auth'
+import GroupPanel from '@/components/GroupPanel.vue'
+import { usePresenceStore } from '@/stores/presence'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const conversationId = computed(() => Number(route.params.id))
 
@@ -22,9 +27,18 @@ const messages = ref<Message[]>([])
 const draft = ref('')
 const loading = ref(true)
 const sending = ref(false)
-const title = ref('')
-const subtitle = ref('')
+const conv = ref<Conversation | null>(null)
+const showGroupPanel = ref(false)
 const scroller = ref<HTMLDivElement | null>(null)
+
+const presence = usePresenceStore()
+const isGroup = computed(() => conv.value?.type === 2)
+const peerOnline = computed(() => presence.isOnline(conv.value?.peerId))
+const title = computed(() => conv.value?.name ?? `会话 #${conversationId.value}`)
+const subtitle = computed(() => {
+  if (conv.value?.type === 2) return `${conv.value.members ?? 0} 位成员`
+  return peerOnline.value ? '在线' : '离线'
+})
 
 const myInitial = computed(() => {
   const name = auth.user?.nickname || auth.user?.username || '?'
@@ -42,8 +56,8 @@ const grouped = computed<GroupedMessage[]>(() => {
   return messages.value.map((m, i) => {
     const prev = i > 0 ? messages.value[i - 1] : null
     const next = i < messages.value.length - 1 ? messages.value[i + 1] : null
-    const sameSenderAsPrev = prev?.senderId === m.senderId && prev?.createdAt === m.createdAt
-    const sameSenderAsNext = next?.senderId === m.senderId && next?.createdAt === m.createdAt
+    const sameSenderAsPrev = !m.system && !prev?.system && prev?.senderId === m.senderId && prev?.createdAt === m.createdAt
+    const sameSenderAsNext = !m.system && !next?.system && next?.senderId === m.senderId && next?.createdAt === m.createdAt
     const isFirst = !sameSenderAsPrev
     const isLast = !sameSenderAsNext
     // 同组只有首条显示时间；不同组间如果时间变了也显示
@@ -55,18 +69,30 @@ const grouped = computed<GroupedMessage[]>(() => {
 async function load() {
   loading.value = true
   try {
-    const [conv, msgs] = await Promise.all([
+    const [c, msgs] = await Promise.all([
       getConversation(conversationId.value),
       listMessages(conversationId.value)
     ])
-    title.value = conv?.name ?? `会话 #${conversationId.value}`
-    subtitle.value = conv?.type === 2 ? `${conv.members ?? 0} 位成员` : '在线'
+    conv.value = c
     messages.value = msgs
     await scrollBottom()
     syncRead()
   } finally {
     loading.value = false
   }
+}
+
+async function reloadConv() {
+  try {
+    conv.value = await getConversation(conversationId.value)
+  } catch {
+    /* ignore */
+  }
+}
+
+function onGroupLeft() {
+  showGroupPanel.value = false
+  router.push({ name: 'chat' })
 }
 
 function syncRead() {
@@ -112,6 +138,38 @@ async function onRecall(m: Message) {
   } catch (e: any) {
     ElMessage.error(e?.message ?? '撤回失败')
   }
+}
+
+// ───── 群已读人数（按需拉取）─────
+interface ReadInfo {
+  loading: boolean
+  readCount: number
+  total: number
+}
+const readMap = ref<Record<number, ReadInfo>>({})
+
+async function loadRead(m: Message) {
+  if (readMap.value[m.id]?.loading) return
+  readMap.value = { ...readMap.value, [m.id]: { loading: true, readCount: 0, total: 0 } }
+  try {
+    const s = await getReadStatus(m.id)
+    readMap.value = { ...readMap.value, [m.id]: { loading: false, readCount: s.readCount, total: s.totalRecipients } }
+  } catch (e: any) {
+    const next = { ...readMap.value }
+    delete next[m.id]
+    readMap.value = next
+    ElMessage.error(e?.message ?? '获取已读状态失败')
+  }
+}
+
+function readLabel(info: ReadInfo): string {
+  if (info.total === 0) return '暂无其他成员'
+  if (info.readCount >= info.total) return '全部已读'
+  return `${info.readCount}/${info.total} 已读`
+}
+
+function readIsAll(info: ReadInfo): boolean {
+  return info.total > 0 && info.readCount >= info.total
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -163,7 +221,7 @@ onUnmounted(() => {
       <div class="room-title">
         <h3>{{ title }}</h3>
         <span class="sub">
-          <span class="online-dot" />
+          <span v-if="!isGroup" class="online-dot" :class="{ off: !peerOnline }" />
           {{ subtitle }}
         </span>
       </div>
@@ -174,7 +232,7 @@ onUnmounted(() => {
         <button class="icon-btn" type="button" aria-label="视频">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
         </button>
-        <button class="icon-btn" type="button" aria-label="更多">
+        <button v-if="isGroup" class="icon-btn" type="button" aria-label="群设置" @click="showGroupPanel = true">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
         </button>
       </div>
@@ -183,8 +241,9 @@ onUnmounted(() => {
     <div ref="scroller" class="messages" :aria-busy="loading || undefined" role="log" aria-live="polite">
       <el-skeleton v-if="loading" :rows="4" animated />
       <template v-else>
-        <!-- 时间分隔线 -->
         <template v-for="m in grouped" :key="m.id">
+          <div v-if="m.system" class="sys-msg"><span>{{ m.content }}</span></div>
+          <template v-else>
           <div v-if="m.showTime && m.isFirst" class="time-divider">
             <span>{{ m.createdAt }}</span>
           </div>
@@ -219,8 +278,22 @@ onUnmounted(() => {
                   </svg>
                 </button>
               </div>
+              <div v-if="m.mine && isGroup && !m.recalled" class="read-meta">
+                <button
+                  class="read-trigger"
+                  :class="{ 'read-all': readMap[m.id] && !readMap[m.id].loading && readIsAll(readMap[m.id]) }"
+                  type="button"
+                  :disabled="readMap[m.id]?.loading"
+                  @click="loadRead(m)"
+                >
+                  <template v-if="!readMap[m.id]">查看已读</template>
+                  <template v-else-if="readMap[m.id].loading">查看中…</template>
+                  <template v-else>{{ readLabel(readMap[m.id]) }}</template>
+                </button>
+              </div>
             </div>
           </div>
+          </template>
         </template>
       </template>
     </div>
@@ -246,6 +319,14 @@ onUnmounted(() => {
         <span v-else class="sending-dot"><i /><i /><i /></span>
       </button>
     </footer>
+
+    <GroupPanel
+      v-if="conv && conv.type === 2"
+      v-model="showGroupPanel"
+      :conv="conv"
+      @refresh="reloadConv"
+      @left="onGroupLeft"
+    />
   </div>
 </template>
 
@@ -288,6 +369,10 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #10b981;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+.online-dot.off {
+  background: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.2);
 }
 .room-actions {
   display: flex;
@@ -350,6 +435,23 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   padding: 3px 12px;
   border-radius: 10px;
   letter-spacing: 0.02em;
+}
+
+/* ───── 系统消息（群成员变更）───── */
+.sys-msg {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+.sys-msg span {
+  max-width: 80%;
+  font-size: 11.5px;
+  color: var(--nook-text-muted);
+  background: rgba(20, 184, 166, 0.06);
+  padding: 4px 12px;
+  border-radius: 10px;
+  text-align: center;
+  line-height: 1.5;
 }
 
 /* ───── Message row ───── */
@@ -491,6 +593,34 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   font-style: italic;
   opacity: 0.55;
   font-size: 13px;
+}
+
+/* ───── 群已读指示 ───── */
+.read-meta {
+  margin-top: 3px;
+  padding: 0 2px;
+}
+.read-trigger {
+  border: none;
+  background: transparent;
+  color: var(--nook-text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 150ms ease;
+}
+.read-trigger:hover:not(:disabled) {
+  color: var(--nook-primary-deep);
+}
+.read-trigger.read-all {
+  color: #10b981;
+}
+.read-trigger:disabled {
+  cursor: default;
+}
+html.dark .read-trigger:hover:not(:disabled) {
+  color: var(--nook-primary-soft);
 }
 
 /* ───── Recall button ───── */

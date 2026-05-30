@@ -3,9 +3,12 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listConversations, type Conversation } from '@/api/im'
 import { chatSocket } from '@/api/ws'
+import NewGroupDialog from '@/components/NewGroupDialog.vue'
+import { usePresenceStore } from '@/stores/presence'
 
 const route = useRoute()
 const router = useRouter()
+const presence = usePresenceStore()
 
 const conversations = ref<Conversation[]>([])
 const loading = ref(true)
@@ -67,9 +70,16 @@ onMounted(() => {
 })
 onUnmounted(() => offMessage?.())
 
+const showNewGroup = ref(false)
+
 function open(c: Conversation) {
   c.unread = 0
   router.push({ name: 'chat-room', params: { id: c.id } })
+}
+
+async function onGroupCreated(conv: Conversation) {
+  await reload()
+  router.push({ name: 'chat-room', params: { id: conv.id } })
 }
 </script>
 
@@ -78,7 +88,7 @@ function open(c: Conversation) {
     <aside class="conv-pane">
       <header class="pane-head">
         <h2>消息</h2>
-        <button class="head-btn" aria-label="发起会话">
+        <button class="head-btn" aria-label="发起群聊" @click="showNewGroup = true">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -107,6 +117,7 @@ function open(c: Conversation) {
               <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3 19a6 6 0 0 1 12 0M13 19a5 5 0 0 1 8 0" stroke-linecap="round" />
             </svg>
             <span v-else>{{ c.name[0]?.toUpperCase() }}</span>
+            <span v-if="c.type === 1 && presence.isOnline(c.peerId)" class="av-dot" />
           </span>
           <div class="conv-body">
             <div class="conv-row">
@@ -130,6 +141,8 @@ function open(c: Conversation) {
         <p class="hint">Nook · 即时聊天 + AI</p>
       </div>
     </section>
+
+    <NewGroupDialog v-model="showNewGroup" @created="onGroupCreated" />
   </div>
 </template>
 
@@ -250,6 +263,7 @@ html.dark .search input {
 }
 
 .conv-avatar {
+  position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -261,6 +275,16 @@ html.dark .search input {
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
+}
+.av-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2px solid var(--nook-surface);
 }
 .conv-avatar[data-type='2'] {
   background: linear-gradient(135deg, #5eead4, #fbbf24);

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { usePresenceStore } from '@/stores/presence'
 import { logout } from '@/api/auth'
 import { chatSocket } from '@/api/ws'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -10,6 +11,7 @@ import ThemeToggle from '@/components/ThemeToggle.vue'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const presence = usePresenceStore()
 
 interface NavItem {
   key: string
@@ -29,9 +31,17 @@ const nav: NavItem[] = [
 
 const currentKey = computed(() => nav.find((n) => n.match(route.path))?.key ?? 'chat')
 
+let offPresence: (() => void) | null = null
+
 onMounted(() => {
   if (auth.token) chatSocket.connect(auth.token)
+  offPresence = chatSocket.on('presence', (frame) => {
+    const d = frame.data as { userId?: number; online?: boolean } | undefined
+    if (d?.userId != null) presence.setOnline(d.userId, !!d.online)
+  })
 })
+
+onUnmounted(() => offPresence?.())
 
 async function onLogout() {
   try {
@@ -49,6 +59,7 @@ async function onLogout() {
     /* 即使失败也清本地 */
   }
   chatSocket.disconnect()
+  presence.reset()
   auth.clear()
   ElMessage.success('已退出')
   router.replace({ name: 'login' })

@@ -13,8 +13,10 @@ import {
   type FriendRequest
 } from '@/api/user'
 import { getOrCreateDirect } from '@/api/im'
+import { usePresenceStore } from '@/stores/presence'
 
 const router = useRouter()
+const presence = usePresenceStore()
 
 type Tab = 'friends' | 'requests' | 'add'
 
@@ -141,7 +143,7 @@ const statusLabel: Record<number, string> = {
             <div class="info">
               <div class="row">
                 <span class="name">{{ f.nickname }}</span>
-                <span v-if="f.online" class="dot" title="在线" />
+                <span v-if="presence.isOnline(f.userId)" class="dot" title="在线" />
               </div>
               <div class="sig">{{ f.signature || `@${f.username}` }}</div>
             </div>
