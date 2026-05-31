@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { listConversations, type Conversation } from '@/api/im'
+import { listConversations, previewIncoming, type Conversation } from '@/api/im'
 import { chatSocket } from '@/api/ws'
 import NewGroupDialog from '@/components/NewGroupDialog.vue'
 import { usePresenceStore } from '@/stores/presence'
@@ -33,13 +33,6 @@ async function reload() {
   }
 }
 
-function previewOf(raw: { recalled?: number; contentType?: number; content?: string }): string {
-  if (raw.recalled === 1) return '[消息已撤回]'
-  if (raw.contentType === 2) return '[图片]'
-  if (raw.contentType === 3) return '[文件]'
-  return raw.content ?? ''
-}
-
 function nowHm(): string {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
@@ -55,7 +48,7 @@ async function onPush(frame: { data?: unknown }) {
     await reload()
     return
   }
-  conv.lastMessage = previewOf(raw)
+  conv.lastMessage = await previewIncoming(raw)
   conv.lastMessageAt = nowHm()
   if (activeId.value !== conv.id) conv.unread += 1
   // 置顶

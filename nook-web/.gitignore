@@ -13,6 +13,10 @@ Thumbs.db
 auto-imports.d.ts
 components.d.ts
 
+# vue-tsc -b 会把 vite.config.ts 误编译出这些产物；.js 优先级高于 .ts，留着会覆盖真配置
+vite.config.js
+vite.config.d.ts
+
 # Local env overrides
 .env.local
 .env.*.local

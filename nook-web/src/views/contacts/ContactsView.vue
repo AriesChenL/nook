@@ -116,7 +116,7 @@ const statusLabel: Record<number, string> = {
       <div class="tabs" role="tablist">
         <button
           v-for="t in [
-            { k: 'friends',  label: '好友', count: friends.length },
+            { k: 'friends',  label: '好友' },
             { k: 'requests', label: '申请', count: pendingRequests.length },
             { k: 'add',      label: '添加' }
           ]"
@@ -138,7 +138,7 @@ const statusLabel: Record<number, string> = {
         <div v-if="!friends.length" class="empty">还没有好友，去「添加」找找看</div>
         <div v-for="g in grouped" :key="g.key" class="group">
           <div class="group-key">{{ g.key }}</div>
-          <button v-for="f in g.items" :key="f.userId" class="friend-row">
+          <div v-for="f in g.items" :key="f.userId" class="friend-row">
             <span class="avatar">{{ (f.nickname[0] ?? '?').toUpperCase() }}</span>
             <div class="info">
               <div class="row">
@@ -151,7 +151,7 @@ const statusLabel: Record<number, string> = {
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.5 8.5 0 1 1 21 11.5Z" /></svg>
               发消息
             </button>
-          </button>
+          </div>
         </div>
       </div>
 

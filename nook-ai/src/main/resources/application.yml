@@ -4,3 +4,55 @@ server:
 spring:
   application:
     name: nook-ai
+
+  # 运行时加载本地密钥文件（properties 格式，如 DEEPSEEK_API_KEY=sk-xxx）。
+  # optional: 文件不存在不报错；两条覆盖「工作目录=模块目录(spring-boot:run/IDE)」与「工作目录=仓库根」两种启动方式。
+  # .env 已在根 .gitignore 中忽略，不会提交；模板见 nook-ai/.env.example。
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:nook-ai/.env[.properties]
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nook
+    username: nook
+    password: nook123
+    driver-class-name: org.postgresql.Driver
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yml
+        import-check:
+          enabled: false
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+
+# DeepSeek：OpenAI 兼容协议，默认 deepseek-v4-flash（1M 上下文）
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: https://api.deepseek.com
+  model: deepseek-v4-flash
+
+nook:
+  ai:
+    # agentscope 临时工作区（仅占位空目录；记忆/会话全部入 PG）
+    workspace-tmp: ${java.io.tmpdir}/nook-ai-workspace
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.lynn.nook: DEBUG

@@ -35,12 +35,14 @@
         <lombok.version>1.18.46</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <spring-ai.version>1.0.0</spring-ai.version>
+        <agentscope.version>1.1.0-RC2</agentscope.version>
         <mybatis-flex.version>1.10.9</mybatis-flex.version>
         <postgresql.version>42.7.4</postgresql.version>
         <rocketmq-spring.version>2.3.3</rocketmq-spring.version>
         <spring-cloud.version>2025.0.2</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
         <hutool.version>5.8.32</hutool.version>
+        <aws-sdk.version>2.28.16</aws-sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -55,6 +57,15 @@
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
                 <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- agentscope-java：HarnessAgent（ReAct + 工作区/记忆/会话）。harness 仅发布 1.1.0-RC 系列 -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-dependencies-bom</artifactId>
+                <version>${agentscope.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -79,6 +90,15 @@
                 <groupId>com.mybatis-flex</groupId>
                 <artifactId>mybatis-flex-dependencies</artifactId>
                 <version>${mybatis-flex.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- AWS SDK for Java v2（S3 客户端 + 预签名，接入 RustFS 等 S3 兼容对象存储） -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

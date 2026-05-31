@@ -69,8 +69,24 @@ services:
       - "10911:10911"
       - "18081:8081"  # gRPC proxy（避开 nook-auth 的 8081）
 
+  # RustFS：S3 兼容对象存储，IM 文件/图片/音视频直传
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: nook-rustfs
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfssecret      # 与 nook-im application.yml 的 nook.storage.secret-key 保持一致
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "9000:9000"   # S3 API（presigned 直传 + 公开读下载）
+      - "9001:9001"   # Web 控制台
+    volumes:
+      - rustfs-data:/data
+
 volumes:
   pg-data:
   redis-data:
   nacos-data:
   nacos-logs:
+  rustfs-data:

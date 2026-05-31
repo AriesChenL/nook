@@ -34,7 +34,14 @@ public class MessageService {
 
     @Transactional
     public MessageVO send(Long senderId, SendMessageRequest req) {
-        if (req.getContent() == null || req.getContent().isBlank()) {
+        short type = req.getContentType() == null ? Message.TYPE_TEXT : req.getContentType();
+        boolean isFile = type == Message.TYPE_IMAGE || type == Message.TYPE_FILE;
+        if (isFile) {
+            // 文件消息：必须带下载地址，content 允许为空（用 fileName 兜底）
+            if (req.getFileUrl() == null || req.getFileUrl().isBlank()) {
+                throw new BusinessException(ResultCode.FILE_META_MISSING);
+            }
+        } else if (req.getContent() == null || req.getContent().isBlank()) {
             throw new BusinessException(ResultCode.MESSAGE_CONTENT_EMPTY);
         }
         conversationService.requireMember(req.getConversationId(), senderId);
@@ -42,8 +49,19 @@ public class MessageService {
         Message m = new Message();
         m.setConversationId(req.getConversationId());
         m.setSenderId(senderId);
-        m.setContentType(req.getContentType() == null ? Message.TYPE_TEXT : req.getContentType());
-        m.setContent(req.getContent());
+        m.setContentType(type);
+        // content 列 NOT NULL：文件消息 content 为空时用文件名兜底（也便于会话列表预览）
+        String content = req.getContent();
+        if (content == null || content.isBlank()) {
+            content = isFile && req.getFileName() != null ? req.getFileName() : "";
+        }
+        m.setContent(content);
+        if (isFile) {
+            m.setFileUrl(req.getFileUrl());
+            m.setFileName(req.getFileName());
+            m.setFileSize(req.getFileSize());
+            m.setMediaType(req.getMediaType());
+        }
         m.setRecalled((short) 0);
         m.setCreatedAt(OffsetDateTime.now());
         messageMapper.insert(m);

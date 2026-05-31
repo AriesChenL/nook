@@ -6,6 +6,9 @@ import {
   getConversation,
   listMessages,
   sendMessage,
+  presignUpload,
+  uploadToStorage,
+  sendFileMessage,
   markRead,
   recallMessage,
   getReadStatus,
@@ -16,6 +19,7 @@ import {
 import { chatSocket } from '@/api/ws'
 import { useAuthStore } from '@/stores/auth'
 import GroupPanel from '@/components/GroupPanel.vue'
+import MessageContent from '@/components/MessageContent.vue'
 import { usePresenceStore } from '@/stores/presence'
 
 const route = useRoute()
@@ -27,6 +31,10 @@ const messages = ref<Message[]>([])
 const draft = ref('')
 const loading = ref(true)
 const sending = ref(false)
+const uploading = ref(false)
+const uploadPct = ref(0)
+const fileInput = ref<HTMLInputElement | null>(null)
+const MAX_FILE_SIZE = 200 * 1024 * 1024 // 200MB，与后端 nook.storage.max-file-size 对齐
 const conv = ref<Conversation | null>(null)
 const showGroupPanel = ref(false)
 const scroller = ref<HTMLDivElement | null>(null)
@@ -118,6 +126,40 @@ async function onSend() {
     ElMessage.error(e?.message ?? '发送失败')
   } finally {
     sending.value = false
+  }
+}
+
+function pickFile() {
+  if (uploading.value) return
+  fileInput.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 清空以便再次选择同一文件
+  if (!file) return
+  if (file.size > MAX_FILE_SIZE) {
+    ElMessage.error('文件超过 200MB 上限')
+    return
+  }
+  uploading.value = true
+  uploadPct.value = 0
+  try {
+    const presigned = await presignUpload(file)
+    await uploadToStorage(presigned.uploadUrl, file, (p) => (uploadPct.value = p))
+    const msg = await sendFileMessage(conversationId.value, {
+      fileUrl: presigned.downloadUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      mediaType: presigned.mediaType
+    })
+    if (!messages.value.some((m) => m.id === msg.id)) messages.value.push(msg)
+    await scrollBottom()
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '发送失败')
+  } finally {
+    uploading.value = false
   }
 }
 
@@ -265,7 +307,7 @@ onUnmounted(() => {
                 <span class="msg-name">{{ m.mine ? auth.displayName : m.senderName }}</span>
               </div>
               <div class="bubble-wrap">
-                <div :class="['bubble', { recalled: m.recalled }]">{{ m.content }}</div>
+                <div :class="['bubble', { recalled: m.recalled }]"><MessageContent :message="m" /></div>
                 <button
                   v-if="m.mine && !m.recalled"
                   class="recall-btn"
@@ -299,6 +341,26 @@ onUnmounted(() => {
     </div>
 
     <footer class="composer">
+      <input
+        ref="fileInput"
+        type="file"
+        class="file-hidden"
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"
+        @change="onFileChange"
+      />
+      <button
+        class="attach-btn"
+        type="button"
+        :disabled="uploading || sending"
+        :aria-busy="uploading || undefined"
+        title="发送图片 / 视频 / 文件"
+        @click="pickFile"
+      >
+        <svg v-if="!uploading" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <span v-else class="up-pct">{{ uploadPct }}%</span>
+      </button>
       <textarea
         v-model="draft"
         rows="1"
@@ -663,6 +725,36 @@ html.dark .read-trigger:hover:not(:disabled) {
   background: var(--nook-surface);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+.file-hidden {
+  display: none;
+}
+.attach-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--nook-surface-border);
+  background: transparent;
+  color: var(--nook-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.attach-btn:hover:not(:disabled) {
+  color: var(--nook-primary);
+  border-color: var(--nook-primary);
+}
+.attach-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.up-pct {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--nook-primary);
 }
 .composer textarea {
   flex: 1;

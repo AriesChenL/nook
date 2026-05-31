@@ -2,7 +2,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getMe, updateProfile } from '@/api/user'
+import { getMe, listFriends, updateProfile } from '@/api/user'
+import { listConversations } from '@/api/im'
 
 const auth = useAuthStore()
 
@@ -13,6 +14,9 @@ const form = reactive({
 })
 const saving = ref(false)
 
+// 概览统计：好友数 / 群组数 / 会话数
+const stats = reactive({ friends: 0, groups: 0, conversations: 0 })
+
 onMounted(async () => {
   try {
     const me = await getMe()
@@ -22,6 +26,16 @@ onMounted(async () => {
     if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
   } catch {
     /* 拉取失败保留本地缓存 */
+  }
+
+  // 统计数据独立加载，失败不影响资料展示
+  try {
+    const [friends, conversations] = await Promise.all([listFriends(), listConversations()])
+    stats.friends = friends.length
+    stats.groups = conversations.filter((c) => c.type === 2).length
+    stats.conversations = conversations.length
+  } catch {
+    /* 统计拉取失败保持 0 */
   }
 })
 
@@ -58,9 +72,9 @@ async function onSave() {
           <div class="name">{{ auth.displayName }}</div>
           <div class="id">@{{ auth.user?.username }} · ID {{ auth.user?.userId }}</div>
           <div class="stats">
-            <span><strong>0</strong> 好友</span>
-            <span><strong>0</strong> 群组</span>
-            <span><strong>0</strong> 消息</span>
+            <span><strong>{{ stats.friends }}</strong> 好友</span>
+            <span><strong>{{ stats.groups }}</strong> 群组</span>
+            <span><strong>{{ stats.conversations }}</strong> 会话</span>
           </div>
         </div>
       </section>

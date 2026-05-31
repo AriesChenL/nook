@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { aiPresets, chatStream } from '@/api/ai'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  aiPresets,
+  chat,
+  createAgent,
+  createSession,
+  deleteAgent,
+  listAgents,
+  listSessions,
+  updateAgent,
+  type Agent,
+  type ChatSession
+} from '@/api/ai'
 
 interface ChatTurn {
   id: number
@@ -9,34 +20,118 @@ interface ChatTurn {
   content: string
 }
 
-const turns = ref<ChatTurn[]>([])
+// ───── 状态 ─────
+const agents = ref<Agent[]>([])
+const currentAgentId = ref<number | null>(null)
+const sessions = ref<ChatSession[]>([])
+const currentSessionId = ref<number | null>(null)
+// 会话 → 对话流（仅本次浏览器会话内存；后端记忆持久，历史接口为后续）
+const turnsBySession = reactive<Record<number, ChatTurn[]>>({})
+
 const draft = ref('')
-const streaming = ref(false)
+const sending = ref(false)
+const loadingAgents = ref(false)
 const scroller = ref<HTMLDivElement | null>(null)
+
+// 新建会话前的临时桶 key（后端首次对话才分配真实 sessionId）
+const NEW_BUCKET = 0
+
+const currentAgent = computed(() => agents.value.find((a) => a.id === currentAgentId.value) ?? null)
+const bucketKey = computed(() => currentSessionId.value ?? NEW_BUCKET)
+const turns = computed<ChatTurn[]>(() => turnsBySession[bucketKey.value] ?? [])
+
+function avatarText(name: string): string {
+  return (name?.[0] ?? 'A').toUpperCase()
+}
 
 async function scrollBottom() {
   await nextTick()
   if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
 }
 
-async function ask(prompt: string) {
-  if (streaming.value || !prompt.trim()) return
-  const userTurn: ChatTurn = { id: Date.now(), role: 'user', content: prompt }
-  const aiTurn: ChatTurn = { id: Date.now() + 1, role: 'assistant', content: '' }
-  turns.value.push(userTurn, aiTurn)
-  draft.value = ''
-  streaming.value = true
-  scrollBottom()
+// ───── 加载 ─────
+async function loadAgents(selectId?: number) {
+  loadingAgents.value = true
   try {
-    for await (const chunk of chatStream(prompt)) {
-      aiTurn.content += chunk
-      scrollBottom()
+    agents.value = await listAgents()
+    if (agents.value.length) {
+      const target = selectId && agents.value.some((a) => a.id === selectId) ? selectId : agents.value[0].id
+      await selectAgent(target)
+    } else {
+      currentAgentId.value = null
+      sessions.value = []
+      currentSessionId.value = null
     }
   } catch (e: any) {
-    aiTurn.content += `\n\n⚠ 出错了：${e?.message ?? '未知错误'}`
+    ElMessage.error(e?.message ?? '加载 Agent 失败')
+  } finally {
+    loadingAgents.value = false
+  }
+}
+
+async function selectAgent(id: number) {
+  if (sending.value) return
+  currentAgentId.value = id
+  try {
+    sessions.value = await listSessions(id)
+    currentSessionId.value = sessions.value.length ? sessions.value[0].id : null
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '加载会话失败')
+    sessions.value = []
+    currentSessionId.value = null
+  }
+}
+
+function onSwitchSession(id: number) {
+  currentSessionId.value = id
+  scrollBottom()
+}
+
+async function newSession() {
+  if (!currentAgentId.value) return
+  try {
+    const s = await createSession(currentAgentId.value)
+    sessions.value.unshift(s)
+    currentSessionId.value = s.id
+    turnsBySession[s.id] = []
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '新建会话失败')
+  }
+}
+
+// ───── 对话（后端同步返回完整回复）─────
+async function ask(prompt: string) {
+  const agentId = currentAgentId.value
+  if (sending.value || !prompt.trim() || !agentId) return
+
+  const key = bucketKey.value
+  // 经响应式代理（reactive 对象的 getter）取数组，push / 下标赋值才会触发视图更新
+  if (!turnsBySession[key]) turnsBySession[key] = []
+  const bucket = turnsBySession[key]
+  const baseId = Date.now()
+  bucket.push({ id: baseId, role: 'user', content: prompt })
+  bucket.push({ id: baseId + 1, role: 'assistant', content: '' })
+  const aiIndex = bucket.length - 1
+  draft.value = ''
+  sending.value = true
+  scrollBottom()
+
+  try {
+    const res = await chat(agentId, prompt, currentSessionId.value ?? undefined)
+    bucket[aiIndex].content = res.reply || '（无回复）'
+    // 首次对话：后端自动建了默认会话，把临时桶迁移到真实 sessionId
+    if (currentSessionId.value == null && res.sessionId != null) {
+      turnsBySession[res.sessionId] = bucket
+      delete turnsBySession[NEW_BUCKET]
+      currentSessionId.value = res.sessionId
+      listSessions(agentId).then((s) => (sessions.value = s)).catch(() => {})
+    }
+  } catch (e: any) {
+    bucket[aiIndex].content = `⚠ 出错了：${e?.message ?? '未知错误'}`
     ElMessage.error('AI 请求失败')
   } finally {
-    streaming.value = false
+    sending.value = false
+    scrollBottom()
   }
 }
 
@@ -51,266 +146,523 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-function clearChat() {
-  if (streaming.value) return
-  turns.value = []
+function clearCurrent() {
+  if (sending.value) return
+  turnsBySession[bucketKey.value] = []
 }
+
+// ───── Agent 增改删 ─────
+const dialogVisible = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
+const form = reactive({ id: 0, name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
+const saving = ref(false)
+
+function openCreate() {
+  dialogMode.value = 'create'
+  Object.assign(form, { id: 0, name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
+  dialogVisible.value = true
+}
+
+function openEdit(a: Agent) {
+  dialogMode.value = 'edit'
+  Object.assign(form, {
+    id: a.id,
+    name: a.name,
+    persona: a.persona ?? '',
+    avatarUrl: a.avatarUrl ?? '',
+    modelName: a.modelName
+  })
+  dialogVisible.value = true
+}
+
+async function saveAgent() {
+  if (!form.name.trim()) {
+    ElMessage.warning('请填写 Agent 名称')
+    return
+  }
+  saving.value = true
+  try {
+    if (dialogMode.value === 'create') {
+      const a = await createAgent({
+        name: form.name.trim(),
+        persona: form.persona.trim() || undefined,
+        avatarUrl: form.avatarUrl.trim() || undefined,
+        modelName: form.modelName.trim() || undefined
+      })
+      ElMessage.success('已创建')
+      dialogVisible.value = false
+      await loadAgents(a.id)
+    } else {
+      const a = await updateAgent(form.id, {
+        name: form.name.trim(),
+        persona: form.persona.trim(),
+        avatarUrl: form.avatarUrl.trim()
+      })
+      const idx = agents.value.findIndex((x) => x.id === a.id)
+      if (idx >= 0) agents.value[idx] = a
+      ElMessage.success('已保存')
+      dialogVisible.value = false
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeAgent(a: Agent) {
+  try {
+    await ElMessageBox.confirm(`删除 Agent「${a.name}」？其对话线程会一并删除，但与其它 Agent 共享的长期记忆仍保留。`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  try {
+    await deleteAgent(a.id)
+    ElMessage.success('已删除')
+    const nextId = agents.value.find((x) => x.id !== a.id)?.id
+    await loadAgents(nextId)
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '删除失败')
+  }
+}
+
+onMounted(() => loadAgents())
 </script>
 
 <template>
   <div class="ai">
-    <header class="ai-head">
-      <div class="title">
-        <span class="logo">
-          <img src="/logo.svg" alt="" width="28" height="28" />
-        </span>
-        <div>
-          <h2>AI 助手</h2>
-          <p>问点什么都行 — 写代码、整理思路、润色文案</p>
-        </div>
-      </div>
-      <button class="ghost-btn" :disabled="streaming || !turns.length" @click="clearChat">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6 l-1 14 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 L5 6" /><path d="M10 11v6M14 11v6" /></svg>
-        清空会话
-      </button>
-    </header>
+    <!-- 左：Agent 列表 -->
+    <aside class="rail">
+      <header class="rail-head">
+        <h2>我的 Agent</h2>
+        <button class="round-btn" title="新建 Agent" @click="openCreate">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        </button>
+      </header>
 
-    <div ref="scroller" class="ai-body">
-      <!-- 空态：欢迎 + 建议 prompt -->
-      <div v-if="!turns.length" class="welcome">
-        <div class="hero">
-          <img src="/logo.svg" alt="" width="56" height="56" />
-          <h3>嗨，我是 Nook AI</h3>
-          <p>挑一个开始，或者直接告诉我你想做什么</p>
-        </div>
-        <div class="presets">
-          <button v-for="p in aiPresets" :key="p" class="preset" @click="ask(p)">
-            {{ p }}
-          </button>
-        </div>
+      <div class="rail-body">
+        <p v-if="loadingAgents" class="rail-hint">加载中…</p>
+        <p v-else-if="!agents.length" class="rail-hint">还没有 Agent<br />点右上角 ＋ 创建一个</p>
+        <button
+          v-for="a in agents"
+          :key="a.id"
+          :class="['agent-item', { active: a.id === currentAgentId }]"
+          @click="selectAgent(a.id)"
+        >
+          <span class="a-avatar">
+            <img v-if="a.avatarUrl" :src="a.avatarUrl" alt="" />
+            <template v-else>{{ avatarText(a.name) }}</template>
+          </span>
+          <span class="a-meta">
+            <span class="a-name">{{ a.name }}</span>
+            <span class="a-sub">{{ a.persona || a.modelName }}</span>
+          </span>
+          <span class="a-ops" @click.stop>
+            <i title="编辑" @click="openEdit(a)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" /></svg>
+            </i>
+            <i title="删除" class="danger" @click="removeAgent(a)">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6 l-1 14 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 L5 6" /></svg>
+            </i>
+          </span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 右：对话区 -->
+    <section class="chat">
+      <!-- 无 Agent -->
+      <div v-if="!currentAgent" class="empty-stage">
+        <img src="/logo.svg" alt="" width="56" height="56" />
+        <h3>创建你的第一个 AI 伙伴</h3>
+        <p>每个 Agent 像好友一样拥有长期记忆，同一账号下的多个 Agent 共享对你的了解</p>
+        <button class="primary-btn" @click="openCreate">＋ 新建 Agent</button>
       </div>
 
-      <!-- 对话流 -->
-      <div v-else class="turns">
-        <div v-for="t in turns" :key="t.id" :class="['turn', t.role]">
-          <span class="role-tag">{{ t.role === 'user' ? '我' : 'AI' }}</span>
-          <div class="bubble">
-            <pre v-if="t.content">{{ t.content }}</pre>
-            <span v-else class="typing"><i /><i /><i /></span>
+      <template v-else>
+        <header class="chat-head">
+          <div class="title">
+            <span class="h-avatar">
+              <img v-if="currentAgent.avatarUrl" :src="currentAgent.avatarUrl" alt="" />
+              <template v-else>{{ avatarText(currentAgent.name) }}</template>
+            </span>
+            <div>
+              <h2>{{ currentAgent.name }}</h2>
+              <p>{{ currentAgent.persona || '（未设定人格）' }} · {{ currentAgent.modelName }}</p>
+            </div>
+          </div>
+          <div class="head-ops">
+            <el-select
+              v-if="sessions.length"
+              :model-value="currentSessionId ?? undefined"
+              placeholder="选择会话"
+              size="small"
+              style="width: 160px"
+              @change="onSwitchSession"
+            >
+              <el-option v-for="s in sessions" :key="s.id" :label="s.title || `会话 #${s.id}`" :value="s.id" />
+            </el-select>
+            <button class="ghost-btn" title="新建会话" @click="newSession">＋ 会话</button>
+            <button class="ghost-btn" :disabled="sending || !turns.length" @click="clearCurrent">清空</button>
+          </div>
+        </header>
+
+        <div ref="scroller" class="chat-body">
+          <div v-if="!turns.length" class="welcome">
+            <div class="hero">
+              <img src="/logo.svg" alt="" width="48" height="48" />
+              <h3>和 {{ currentAgent.name }} 聊点什么</h3>
+              <p>它会记住你说过的重要事情</p>
+            </div>
+            <div class="presets">
+              <button v-for="p in aiPresets" :key="p" class="preset" @click="ask(p)">{{ p }}</button>
+            </div>
+          </div>
+
+          <div v-else class="turns">
+            <div v-for="t in turns" :key="t.id" :class="['turn', t.role]">
+              <span class="role-tag">{{ t.role === 'user' ? '我' : currentAgent.name }}</span>
+              <div class="bubble">
+                <pre v-if="t.content">{{ t.content }}</pre>
+                <span v-else class="typing"><i /><i /><i /></span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <footer class="composer">
-      <textarea
-        v-model="draft"
-        rows="1"
-        placeholder="给 AI 提一个问题，Enter 发送 · Shift+Enter 换行"
-        :disabled="streaming"
-        @keydown="onKeydown"
-      />
-      <button class="send-btn" :disabled="!draft.trim() || streaming" @click="onSubmit">
-        <svg v-if="!streaming" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
-        <span v-else class="typing"><i /><i /><i /></span>
-        <span>{{ streaming ? '思考中…' : '发送' }}</span>
-      </button>
-    </footer>
+        <footer class="composer">
+          <textarea
+            v-model="draft"
+            rows="1"
+            placeholder="说点什么，Enter 发送 · Shift+Enter 换行"
+            :disabled="sending"
+            @keydown="onKeydown"
+          />
+          <button class="send-btn" :disabled="!draft.trim() || sending" @click="onSubmit">
+            <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+            <span v-else class="typing"><i /><i /><i /></span>
+            <span>{{ sending ? '思考中…' : '发送' }}</span>
+          </button>
+        </footer>
+      </template>
+    </section>
+
+    <!-- 新建 / 编辑 Agent -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogMode === 'create' ? '新建 Agent' : '编辑 Agent'"
+      width="460px"
+    >
+      <el-form label-position="top">
+        <el-form-item label="名称" required>
+          <el-input v-model="form.name" maxlength="64" placeholder="例如：小柚" />
+        </el-form-item>
+        <el-form-item label="人格设定（注入系统提示，决定语气性格）">
+          <el-input
+            v-model="form.persona"
+            type="textarea"
+            :rows="3"
+            placeholder="例如：你是一个元气满满、爱用颜文字的桌面助手"
+          />
+        </el-form-item>
+        <el-form-item label="头像 URL（可选）">
+          <el-input v-model="form.avatarUrl" maxlength="512" placeholder="https://..." />
+        </el-form-item>
+        <el-form-item v-if="dialogMode === 'create'" label="模型">
+          <el-input v-model="form.modelName" maxlength="64" placeholder="deepseek-v4-flash" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveAgent">
+          {{ dialogMode === 'create' ? '创建' : '保存' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
 .ai {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 260px 1fr;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
 }
 
-.ai-head {
+/* ───── 左侧 Agent rail ───── */
+.rail {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface);
+  min-height: 0;
+}
+.rail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 28px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: blur(12px);
 }
-.title {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.title .logo img {
-  border-radius: 10px;
-  box-shadow: 0 6px 14px -4px rgba(15, 118, 110, 0.4);
-}
-.title h2 {
+.rail-head h2 {
   margin: 0;
   font-family: var(--nook-font-display);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--nook-text);
 }
-.title p {
-  margin: 2px 0 0;
+.round-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  color: #fff;
+  cursor: pointer;
+  transition: filter 160ms ease;
+}
+.round-btn:hover { filter: brightness(1.08); }
+
+.rail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rail-hint {
+  margin: 28px 12px;
+  text-align: center;
   font-size: 12.5px;
+  line-height: 1.7;
   color: var(--nook-text-muted);
 }
+.agent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.agent-item:hover { background: rgba(20, 184, 166, 0.08); }
+.agent-item.active {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(251, 146, 60, 0.12));
+  border-color: rgba(20, 184, 166, 0.3);
+}
+.a-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  color: #fff;
+  font-family: var(--nook-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  overflow: hidden;
+}
+.a-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.a-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.a-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--nook-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a-sub {
+  font-size: 12px;
+  color: var(--nook-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.a-ops {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.agent-item:hover .a-ops { opacity: 1; }
+.a-ops i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--nook-text-muted);
+  cursor: pointer;
+}
+.a-ops i:hover { background: rgba(0, 0, 0, 0.06); color: var(--nook-text); }
+.a-ops i.danger:hover { color: #ef4444; }
+
+/* ───── 右侧对话 ───── */
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.empty-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  text-align: center;
+}
+.empty-stage img { border-radius: 16px; box-shadow: 0 20px 40px -16px rgba(15, 118, 110, 0.45); margin-bottom: 4px; }
+.empty-stage h3 {
+  margin: 0;
+  font-family: var(--nook-font-display);
+  font-size: 22px;
+  background: linear-gradient(135deg, #0f766e, #fb923c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.empty-stage p { margin: 0; max-width: 380px; color: var(--nook-text-muted); font-size: 13.5px; line-height: 1.6; }
+.primary-btn {
+  margin-top: 8px;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  color: #fff;
+  font-family: var(--nook-font-display);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.primary-btn:hover { filter: brightness(1.06); }
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface);
+}
+.chat-head .title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.h-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  color: #fff;
+  font-family: var(--nook-font-display);
+  font-weight: 700;
+  overflow: hidden;
+}
+.h-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.chat-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--nook-text); }
+.chat-head .title p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--nook-text-muted);
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.head-ops { display: flex; align-items: center; gap: 8px; }
 .ghost-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
+  height: 30px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid var(--nook-surface-border);
   background: transparent;
   color: var(--nook-text);
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
-  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  transition: border-color 160ms ease, color 160ms ease;
 }
-.ghost-btn:hover:not(:disabled) {
-  border-color: #ef4444;
-  color: #ef4444;
-}
+.ghost-btn:hover:not(:disabled) { border-color: var(--nook-primary); color: var(--nook-primary-deep); }
 .ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.ai-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 28px 28px;
-}
-.ai-body::-webkit-scrollbar { width: 6px; }
-.ai-body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+.chat-body { flex: 1; overflow-y: auto; padding: 20px 24px 28px; min-height: 0; }
+.chat-body::-webkit-scrollbar { width: 6px; }
+.chat-body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
 
-.welcome {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 26px;
-  padding: 56px 16px 24px;
-  text-align: center;
-}
-.hero img {
-  border-radius: 16px;
-  box-shadow: 0 20px 40px -16px rgba(15, 118, 110, 0.45);
-  margin-bottom: 12px;
-}
-.hero h3 {
-  margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 22px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #0f766e, #fb923c);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.hero p {
-  margin: 6px 0 0;
-  color: var(--nook-text-muted);
-  font-size: 13.5px;
-}
-.presets {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 280px));
-  gap: 10px;
-}
-@media (max-width: 640px) {
-  .presets { grid-template-columns: 1fr; }
-}
+.welcome { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 48px 16px 24px; text-align: center; }
+.hero img { border-radius: 14px; box-shadow: 0 16px 32px -14px rgba(15, 118, 110, 0.45); margin-bottom: 10px; }
+.hero h3 { margin: 0; font-family: var(--nook-font-display); font-size: 20px; font-weight: 700; color: var(--nook-text); }
+.hero p { margin: 6px 0 0; color: var(--nook-text-muted); font-size: 13px; }
+.presets { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 10px; }
+@media (max-width: 640px) { .presets { grid-template-columns: 1fr; } }
 .preset {
-  padding: 14px 16px;
-  border-radius: 14px;
+  padding: 13px 15px;
+  border-radius: 13px;
   border: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
   color: var(--nook-text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+  transition: border-color 160ms ease, transform 160ms ease;
 }
-.preset:hover {
-  border-color: var(--nook-primary);
-  transform: translateY(-1px);
-}
+.preset:hover { border-color: var(--nook-primary); transform: translateY(-1px); }
 
-.turns {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  max-width: 820px;
-  margin: 0 auto;
-}
-.turn {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+.turns { display: flex; flex-direction: column; gap: 18px; max-width: 820px; margin: 0 auto; }
+.turn { display: flex; flex-direction: column; gap: 6px; }
 .turn.user { align-items: flex-end; }
-.role-tag {
-  font-family: var(--nook-font-display);
-  font-size: 11.5px;
-  letter-spacing: 0.05em;
-  color: var(--nook-text-muted);
-  padding: 0 4px;
-}
-.bubble {
-  padding: 12px 16px;
-  border-radius: 16px;
-  max-width: 85%;
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-}
-.turn.user .bubble {
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
-  border-color: transparent;
-  color: #fff;
-}
-.bubble pre {
-  margin: 0;
-  font-family: var(--nook-font-sans);
-  font-size: 14px;
-  line-height: 1.6;
-  color: inherit;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+.role-tag { font-family: var(--nook-font-display); font-size: 11.5px; letter-spacing: 0.04em; color: var(--nook-text-muted); padding: 0 4px; }
+.bubble { padding: 12px 16px; border-radius: 16px; max-width: 85%; border: 1px solid var(--nook-surface-border); background: var(--nook-surface); }
+.turn.user .bubble { background: linear-gradient(135deg, #14b8a6, #0f766e); border-color: transparent; color: #fff; }
+.bubble pre { margin: 0; font-family: var(--nook-font-sans); font-size: 14px; line-height: 1.6; color: inherit; white-space: pre-wrap; word-break: break-word; }
 
-.typing {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
-.typing i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: blink 1s infinite ease-in-out;
-}
+.typing { display: inline-flex; gap: 4px; align-items: center; }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1s infinite ease-in-out; }
 .typing i:nth-child(2) { animation-delay: 0.15s; }
 .typing i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes blink {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.6); }
-  40% { opacity: 1; transform: scale(1); }
-}
+@keyframes blink { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.6); } 40% { opacity: 1; transform: scale(1); } }
 
 .composer {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  padding: 12px 28px 18px;
+  padding: 12px 24px 18px;
   border-top: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(12px);
 }
 .composer textarea {
   flex: 1;
@@ -329,7 +681,6 @@ function clearChat() {
 }
 html.dark .composer textarea { background: rgba(4, 47, 46, 0.5); }
 .composer textarea:focus { border-color: var(--nook-primary); }
-
 .send-btn {
   display: inline-flex;
   align-items: center;
@@ -344,8 +695,12 @@ html.dark .composer textarea { background: rgba(4, 47, 46, 0.5); }
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: filter 180ms ease;
+  transition: filter 160ms ease;
 }
 .send-btn:hover:not(:disabled) { filter: brightness(1.06); }
 .send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+  .ai { grid-template-columns: 200px 1fr; }
+}
 </style>

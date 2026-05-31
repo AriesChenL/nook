@@ -38,6 +38,15 @@ nook:
   im:
     mq:
       enabled: false
+  # 对象存储（RustFS / S3 兼容）：预签名直传 + 公开读下载
+  storage:
+    endpoint: http://localhost:9000          # 浏览器可达地址，作为 presigned URL 的 host
+    access-key: rustfsadmin
+    secret-key: rustfssecret
+    bucket: nook-im
+    public-base-url: http://localhost:9000/nook-im   # 下载/预览前缀（bucket 公开读）
+    presign-expire-seconds: 600              # 预签名上传 URL 有效期
+    max-file-size: 209715200                 # 单文件上限 200MB
 
 rocketmq:
   name-server: localhost:9876

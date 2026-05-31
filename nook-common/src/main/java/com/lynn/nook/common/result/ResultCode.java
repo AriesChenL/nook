@@ -42,7 +42,17 @@ public enum ResultCode {
     GROUP_MEMBER_ALREADY(3010, "用户已在群中"),
     GROUP_MEMBER_NOT_FOUND(3011, "该用户不在群中"),
     GROUP_OWNER_CANNOT_LEAVE(3012, "群主退群前需先转让群主"),
-    GROUP_ROLE_INVALID(3013, "非法的成员角色");
+    GROUP_ROLE_INVALID(3013, "非法的成员角色"),
+
+    FILE_TOO_LARGE(3014, "文件超过大小上限"),
+    FILE_TYPE_NOT_ALLOWED(3015, "不支持的文件类型"),
+    FILE_META_MISSING(3016, "文件消息缺少文件信息"),
+
+    AI_AGENT_NOT_FOUND(4001, "AI 智能体不存在"),
+    AI_AGENT_FORBIDDEN(4002, "无权操作该 AI 智能体"),
+    AI_CHAT_SESSION_NOT_FOUND(4003, "AI 对话会话不存在"),
+    AI_MODEL_ERROR(4004, "AI 模型调用失败"),
+    AI_AGENT_NAME_BLANK(4005, "AI 智能体名称不能为空");
 
     private final int code;
     private final String message;

@@ -89,6 +89,17 @@
             <artifactId>mybatis-flex-processor</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!-- 对象存储：AWS S3 SDK v2（含 S3Presigner，对接 RustFS） -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <!-- S3Client 同步 HTTP 实现：JDK 自带 HttpURLConnection，最轻量 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

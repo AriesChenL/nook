@@ -32,6 +32,10 @@ interface MessageVO {
   senderId: number
   contentType: number // 1=text 2=image 3=file 4=系统消息(JSON)
   content?: string
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
+  mediaType?: string
   recalled?: number
   recalledAt?: string
   createdAt?: string
@@ -70,6 +74,10 @@ export interface Message {
   senderName: string
   contentType: number
   content: string
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
+  mediaType?: string
   createdAt: string
   createdAtMs: number
   mine?: boolean
@@ -175,16 +183,38 @@ function systemText(p: SystemPayload): string {
   }
 }
 
+// 按 MIME 归类，决定气泡如何渲染：图片/视频/音频/普通文件
+export function fileKind(mediaType?: string): 'image' | 'video' | 'audio' | 'file' {
+  if (!mediaType) return 'file'
+  if (mediaType.startsWith('image/')) return 'image'
+  if (mediaType.startsWith('video/')) return 'video'
+  if (mediaType.startsWith('audio/')) return 'audio'
+  return 'file'
+}
+
 function previewOf(vo: MessageVO | undefined): string {
   if (!vo) return ''
   if (vo.recalled === 1) return '[消息已撤回]'
   if (vo.contentType === 2) return '[图片]'
-  if (vo.contentType === 3) return '[文件]'
+  if (vo.contentType === 3) {
+    const kind = fileKind(vo.mediaType)
+    if (kind === 'video') return '[视频]'
+    if (kind === 'audio') return '[语音]'
+    return `[文件] ${vo.fileName ?? ''}`.trim()
+  }
   if (vo.contentType === 4) {
     const p = parseSystem(vo.content)
     return p ? systemText(p) : '[系统消息]'
   }
   return vo.content ?? ''
+}
+
+// WS 推送帧 → 会话列表预览文案：系统消息/文件消息均正确转换，按需补全用户名
+export async function previewIncoming(raw: unknown): Promise<string> {
+  const vo = raw as MessageVO
+  const ids = systemUserIds(vo).filter((id) => id && id !== myId())
+  if (ids.length) await resolveUsers(ids)
+  return previewOf(vo)
 }
 
 // ───── VO → UI 映射 ─────
@@ -204,6 +234,10 @@ function mapMessage(vo: MessageVO): Message {
     senderName: mine ? '我' : userName(vo.senderId),
     contentType: vo.contentType,
     content,
+    fileUrl: vo.fileUrl,
+    fileName: vo.fileName,
+    fileSize: vo.fileSize,
+    mediaType: vo.mediaType,
     createdAt: fmtTime(ms),
     createdAtMs: ms,
     mine,
@@ -318,6 +352,96 @@ export async function sendMessage(conversationId: number, content: string): Prom
     return delay(msg, 120)
   }
   const vo = await http.post<unknown, MessageVO>('/im/messages', { conversationId, content })
+  return mapMessage(vo)
+}
+
+// ───── 文件消息：预签名直传 + 发送 ─────
+export interface PresignResult {
+  uploadUrl: string
+  downloadUrl: string
+  objectKey: string
+  mediaType: string
+  expireSeconds: number
+}
+
+export interface FileMessageMeta {
+  fileUrl: string
+  fileName: string
+  fileSize: number
+  mediaType: string
+}
+
+/** 申请预签名上传地址。mock 模式用本地 blob URL 兜底，便于无后端预览。 */
+export function presignUpload(file: File): Promise<PresignResult> {
+  const mediaType = file.type || 'application/octet-stream'
+  if (USE_MOCK) {
+    const url = URL.createObjectURL(file)
+    return delay({ uploadUrl: url, downloadUrl: url, objectKey: file.name, mediaType, expireSeconds: 600 })
+  }
+  return http.post<unknown, PresignResult>('/im/files/presign', {
+    fileName: file.name,
+    mimeType: mediaType,
+    size: file.size
+  })
+}
+
+/** PUT 直传到对象存储，回调上传百分比（0-100）。 */
+export function uploadToStorage(
+  uploadUrl: string,
+  file: File,
+  onProgress?: (pct: number) => void
+): Promise<void> {
+  if (USE_MOCK) {
+    onProgress?.(100)
+    return delay(undefined) as Promise<void>
+  }
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', uploadUrl)
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`上传失败 (${xhr.status})`))
+    xhr.onerror = () => reject(new Error('上传失败，请检查网络或存储服务'))
+    xhr.send(file)
+  })
+}
+
+/** 发送文件消息：image/* → contentType 2，其余 → 3。 */
+export async function sendFileMessage(conversationId: number, meta: FileMessageMeta): Promise<Message> {
+  const contentType = meta.mediaType.startsWith('image/') ? 2 : 3
+  if (USE_MOCK) {
+    const msg = {
+      id: Date.now(),
+      conversationId,
+      senderId: 0,
+      senderName: '我',
+      contentType,
+      content: meta.fileName,
+      fileUrl: meta.fileUrl,
+      fileName: meta.fileName,
+      fileSize: meta.fileSize,
+      mediaType: meta.mediaType,
+      createdAt: fmtTime(Date.now()),
+      createdAtMs: Date.now(),
+      mine: true
+    } as Message
+    ;(mockMessages[conversationId] ??= []).push(msg as never)
+    return delay(msg, 120)
+  }
+  const vo = await http.post<unknown, MessageVO>('/im/messages', {
+    conversationId,
+    contentType,
+    content: meta.fileName,
+    fileUrl: meta.fileUrl,
+    fileName: meta.fileName,
+    fileSize: meta.fileSize,
+    mediaType: meta.mediaType
+  })
   return mapMessage(vo)
 }
 

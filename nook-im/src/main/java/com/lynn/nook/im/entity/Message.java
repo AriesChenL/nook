@@ -31,6 +31,19 @@ public class Message {
 
     private String content;
 
+    /** 文件消息（contentType=2/3）专用：下载/预览地址、原始文件名、字节大小、MIME。 */
+    @Column("file_url")
+    private String fileUrl;
+
+    @Column("file_name")
+    private String fileName;
+
+    @Column("file_size")
+    private Long fileSize;
+
+    @Column("media_type")
+    private String mediaType;
+
     /** 0=正常 1=已撤回 */
     private Short recalled;
 
