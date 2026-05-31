@@ -2,7 +2,7 @@
 
 > 即时通讯（单聊 / 群聊）+ AI 助手 的全栈微服务平台。后端 Spring Boot 微服务，前端 Vue 3 SPA，所有请求统一经网关鉴权后转发。
 
-**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态），117 个单测全绿，已真实环境端到端验证；`nook-ai` 待实现。
+**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆）已落地，127 个单测全绿，已真实环境端到端验证。
 
 ---
 
@@ -52,8 +52,8 @@
 | `nook-gateway` | 网关：路由 + JWT 校验 + Redis token 核对 + 注入 `X-User-Id` + CORS + WS token 兼容 |
 | `nook-auth` | 认证：注册/登录/登出/改密 + 多端踢出 |
 | `nook-user` | 用户资料 + 好友关系全流程 |
-| `nook-im` | IM：单聊/群聊会话、消息、WebSocket、在线状态、撤回、已读 |
-| `nook-ai` | AI 助手（待实现，架构接入点已留） |
+| `nook-im` | IM：单聊/群聊会话、消息、WebSocket、在线状态、撤回、已读、文件/图片消息（RustFS 直传） |
+| `nook-ai` | AI：用户私有 Agent（agentscope-harness）+ 同 owner 多 Agent 共享长期记忆，100% 入 PG |
 | `nook-web` | 前端 Vue 3 SPA |
 
 ---
@@ -67,8 +67,9 @@
 - PostgreSQL · MyBatis-Flex 1.10.9
 - Redis（token 黑名单 / 在线状态 / 单端在线索引）
 - RocketMQ（默认关闭，多实例广播时开启）
+- 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
-- Spring AI 1.0.0（已引入，nook-ai 待用）
+- AI：agentscope-harness 1.1.0-RC2（HarnessAgent）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
 
 **前端（nook-web）**
 - Vue 3.5 · Vite · TypeScript · Pinia · Vue Router
@@ -94,7 +95,15 @@
 - **群聊已读人数**：已读 N/M
 - **实时 WebSocket**：新消息 / 撤回 / 好友上线下线推送，心跳，多端会话
 - **在线状态**：Redis 计数 + TTL 兜底，跳变时广播给好友
+- **文件 / 图片消息**：`POST /im/files/presign` 签发 S3 预签名 PUT URL，客户端直传 RustFS（不经业务服务中转），消息 `contentType=2 图片 / 3 文件`；MIME 白名单 + 大小上限；前端按 MIME 渲染图片/视频/音频/文件气泡
 - **多实例一致性**：新消息 / 撤回 / 在线状态统一走事件总线，开启 MQ 后 BROADCASTING 跨实例广播
+
+### 🤖 AI 助手（nook-ai）
+- **用户私有 Agent**：每个用户可建多个属于自己的 AI Agent，像好友一样有长期记忆；建/列/改/删，全程 owner 校验
+- **共享长期记忆**：同一 owner 的多个 Agent 经 `SharedMemoryStore` 命名空间装饰器共享 `MEMORY.md`/`memory`，人格（sysPrompt）与对话会话各自独立
+- **只读环境 100% 入 PG**：自实现 `PgBaseStore`（workspace）+ `StoreBackedSession`（对话快照），不依赖任何本地文件/SQLite
+- **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 同步对话（`/ai/agents/{id}/chat`，`HarnessAgent.call().block()`）
+- **模型**：DeepSeek `deepseek-v4-flash`；API Key 走 `nook-ai/.env`（启动加载，不入库）
 
 ### 🚪 网关（nook-gateway）
 - 路由转发 + JWT 鉴权 + Redis token 校验 + 注入 `X-User-Id` / `X-Username` + CORS + WebSocket `?access_token=` 兼容 + OPTIONS 放行
@@ -120,11 +129,13 @@ nook.bat down     :: 停止
 nook.bat reset    :: 清库重来（down -v + 删数据）
 ```
 
-底层即 `docker-compose.yml`，包含 PostgreSQL / Redis / Nacos / RocketMQ。
+底层即 `docker-compose.yml`，包含 PostgreSQL / Redis / Nacos / RocketMQ / RustFS（对象存储）。
+
+> **AI 密钥**：跑 `nook-ai` 前在 `nook-ai/.env` 填 `DEEPSEEK_API_KEY=sk-xxx`（模板见 `nook-ai/.env.example`，`.env` 已 gitignore，启动经 `spring.config.import` 自动加载）。
 
 ### 2. 起后端
 
-启动顺序：**先 `nook-auth`（其余依赖 Nacos 注册）→ `nook-gateway` → `nook-user` → `nook-im`**。
+启动顺序：**先 `nook-auth`（其余依赖 Nacos 注册）→ `nook-gateway` → `nook-user` → `nook-im` → `nook-ai`**。
 
 ```bash
 # 确保 JDK 25
@@ -139,6 +150,7 @@ export JAVA_HOME=/path/to/jdk-25       # *nix
 ./mvnw.cmd -pl nook-gateway spring-boot:run
 ./mvnw.cmd -pl nook-user spring-boot:run
 ./mvnw.cmd -pl nook-im spring-boot:run
+./mvnw.cmd -pl nook-ai spring-boot:run
 ```
 
 ### 3. 起前端
@@ -161,11 +173,12 @@ pnpm dev        # http://localhost:5173
 | nook-auth | 8081 | |
 | nook-user | 8082 | |
 | nook-im | 8083 | WebSocket 在此 |
-| nook-ai | 8084 | 未实现 |
+| nook-ai | 8084 | AI Agent（需配 `DEEPSEEK_API_KEY`） |
 | 前端 dev | 5173 | Vite |
 | PostgreSQL | 5432 | db `nook` / 用户 `nook` `nook123` |
 | Redis | 6379 | 密码 `redis123` |
 | Nacos | 8848 | |
+| RustFS | 9000 / 9001 | S3 API / 控制台（rustfsadmin / rustfssecret） |
 | RocketMQ namesrv / broker | 9876 / 10911 | 默认未启用 |
 
 ---
@@ -211,6 +224,15 @@ pnpm dev        # http://localhost:5173
 | POST / GET | `/im/messages` · `/im/messages?conversationId=&beforeId=&limit=` | 发消息 / 历史 |
 | POST | `/im/messages/{id}/recall` | 撤回 |
 | GET | `/im/messages/{id}/read-status` | 已读人数 |
+| POST | `/im/files/presign` | `{fileName,mimeType,size}` → 预签名 PUT URL（再直传 + 发文件消息） |
+
+### AI `/ai/*`
+| Method | Path | 说明 |
+|---|---|---|
+| POST / GET | `/ai/agents` | 建 Agent `{name,persona?,avatarUrl?,modelName?}` / 我的 Agent 列表 |
+| GET / PUT / DELETE | `/ai/agents/{id}` | 详情 / 改 name·persona·avatar / 删 |
+| POST / GET | `/ai/agents/{id}/sessions` | 建对话线程 `{title?}` / 线程列表 |
+| POST | `/ai/agents/{id}/chat` | 同步对话 `{sessionId?,content}` → `{sessionId,reply}`（缺 sessionId 自动建默认会话） |
 
 ---
 
@@ -235,21 +257,24 @@ pnpm dev        # http://localhost:5173
 - **多实例广播**：默认 `nook.im.mq.enabled=false`（单机本地直推）；多实例部署设 `true`，新消息/撤回/在线状态走 RocketMQ BROADCASTING。
 - **Nacos 3.x**：需配 `NACOS_AUTH_TOKEN`（base64）等三件套，即使关认证也要给。
 - **PostgreSQL 18+**：数据卷挂载到 `/var/lib/postgresql/data`。
-- **MyBatis-Flex**：每个 ORM 模块需单独加 `spring-boot-starter-jdbc`。
+- **MyBatis-Flex**：每个 ORM 模块需单独加 `spring-boot-starter-jdbc`，启动类加 `@MapperScan`。
+- **AI 密钥**：`nook-ai/.env` 写 `DEEPSEEK_API_KEY`（不入库），或用同名环境变量覆盖。
+- **对象存储**：`docker-compose` 的 `RUSTFS_SECRET_KEY` 须与 `nook-im` 的 `nook.storage.secret-key` 一致；bucket 由 `nook-im` 启动自建。
 
 ---
 
 ## 测试
 
 ```bash
-# 全量单测（117 用例），务必带 JDK 25
+# 全量单测（127 用例），务必带 JDK 25
 JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 # 单模块（带 -am 连依赖一起编，避免用到 .m2 里过期的 nook-common）
 ./mvnw.cmd -pl nook-im -am test
+./mvnw.cmd -pl nook-ai -am test
 ```
 
-覆盖：认证、好友、会话/消息/撤回/已读、群聊管理与权限、系统消息、成员资料聚合、在线状态、多端踢出、事件广播、全局异常。
+覆盖：认证、好友、会话/消息/撤回/已读、群聊管理与权限、系统消息、成员资料聚合、在线状态、多端踢出、事件广播、全局异常、AI 共享记忆命名空间归一与 Agent CRUD/越权。
 
 ---
 
@@ -261,26 +286,26 @@ nook/
 ├─ nook-gateway/    网关
 ├─ nook-auth/       认证
 ├─ nook-user/       用户 + 好友
-├─ nook-im/         IM（单聊/群聊/WS/在线状态）
-├─ nook-ai/         AI（待实现）
+├─ nook-im/         IM（单聊/群聊/WS/在线状态/文件消息）
+├─ nook-ai/         AI（用户私有 Agent + 共享记忆，agentscope-harness）
 ├─ nook-web/        前端 Vue 3
-├─ sql/             schema 初始化（01_auth / 02_user / 03_im）
+├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
+├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
 ├─ docker-compose.yml
-├─ nook.bat         基础设施一键启停
-├─ PROGRESS.md          前端进度文档（前端维护）
-└─ BACKEND_PROGRESS.md  后端进度文档（后端维护）
+└─ nook.bat         基础设施一键启停
 ```
 
-> 进度详情：后端看 **`BACKEND_PROGRESS.md`**，前端看 **`PROGRESS.md`**。
+> 进度详情由 `PROGRESS.md`（前端）/ `BACKEND_PROGRESS.md`（后端）记录，二者为维护者本地工作文档，不纳入版本库。
 
 ---
 
 ## 路线图
 
-- [ ] **nook-ai**：接入 Spring AI（OpenAI 兼容协议），`POST /ai/chat` 输出 SSE 流；AI 作为"特殊用户"订阅 IM 消息 MQ → 调 LLM → 回写
-- [ ] **图片/文件消息**：依赖头像/文件上传（存储方案待定：本地目录 / MinIO / 云 OSS）
+- [x] **nook-ai**：agentscope-harness 用户私有 Agent + 共享长期记忆 + 100% 入 PG + DeepSeek（同步对话）
+- [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
+- [ ] **AI 增强**：SSE 流式对话、会话历史接口、memory_search 全文检索
 - [ ] **会话列表去 N+1**：`ConversationVO` 增加 `lastMessageContent`
 - [ ] **在线状态快照**：新连上的用户主动拉取"当前在线好友"
-- [ ] **可观测**：业务服务接入 actuator + Prometheus
+- [x] **可观测**：业务服务接入 actuator 健康端点
 - [ ] **JWT 密钥统一**到 Nacos 共享配置
 - [ ] **离线推送**（APNs / FCM）
