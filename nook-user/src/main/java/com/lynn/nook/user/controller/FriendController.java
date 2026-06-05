@@ -49,28 +49,30 @@ public class FriendController {
 
     @PostMapping("/requests/{id}/accept")
     public Result<Void> accept(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                               @PathVariable("id") Long requestId) {
+                               @PathVariable("id") String requestId) {
         friendService.accept(userId, requestId);
         return Result.ok();
     }
 
     @PostMapping("/requests/{id}/reject")
     public Result<Void> reject(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                               @PathVariable("id") Long requestId) {
+                               @PathVariable("id") String requestId) {
         friendService.reject(userId, requestId);
         return Result.ok();
     }
 
+    /** 路径参数 friendUserId 为好友 public_id（脱敏）。 */
     @DeleteMapping("/{friendUserId}")
     public Result<Void> remove(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                               @PathVariable Long friendUserId) {
+                               @PathVariable String friendUserId) {
         friendService.removeFriend(userId, friendUserId);
         return Result.ok();
     }
 
+    /** 路径参数 friendUserId 为好友 public_id（脱敏）。 */
     @PutMapping("/{friendUserId}/remark")
     public Result<Void> updateRemark(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                                     @PathVariable Long friendUserId,
+                                     @PathVariable String friendUserId,
                                      @Valid @RequestBody UpdateFriendRemarkRequest req) {
         friendService.updateRemark(userId, friendUserId, req.getRemark());
         return Result.ok();

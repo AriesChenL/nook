@@ -167,7 +167,7 @@ html.dark .theme-seg {
 }
 .seg-btn.active {
   color: #fff;
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   box-shadow: 0 6px 14px -6px rgba(20, 184, 166, 0.6);
 }
 html.dark .seg-btn.active {

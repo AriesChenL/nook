@@ -14,7 +14,8 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 public class FriendRequestVO {
 
-    private Long id;
+    /** 好友申请对外标识：public_id（脱敏，字符串）。 */
+    private String id;
     private UserVO fromUser;
     private UserVO toUser;
     private String message;
@@ -24,7 +25,7 @@ public class FriendRequestVO {
 
     public static FriendRequestVO from(FriendRequest r, UserVO fromUser, UserVO toUser) {
         return FriendRequestVO.builder()
-                .id(r.getId())
+                .id(r.getPublicId())
                 .fromUser(fromUser)
                 .toUser(toUser)
                 .message(r.getMessage())

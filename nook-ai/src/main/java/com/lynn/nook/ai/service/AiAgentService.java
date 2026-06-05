@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * AI Agent 的管理（CRUD）+ 对话会话线程管理。所有操作校验 owner。
@@ -37,6 +38,7 @@ public class AiAgentService {
             throw new BusinessException(ResultCode.AI_AGENT_NAME_BLANK);
         }
         AiAgent a = new AiAgent();
+        a.setPublicId(UUID.randomUUID().toString());
         a.setOwnerUserId(ownerUserId);
         a.setName(req.getName().trim());
         a.setPersona(req.getPersona() == null ? "" : req.getPersona());
@@ -88,6 +90,24 @@ public class AiAgentService {
         registry.invalidate(agentId);
     }
 
+    /** agent public_id → 数字主键 id；解析不到抛资源不存在。 */
+    public Long resolveAgentId(String agentPublicId) {
+        Long id = agentMapper.selectIdByPublicId(agentPublicId);
+        if (id == null) {
+            throw new BusinessException(ResultCode.AI_AGENT_NOT_FOUND);
+        }
+        return id;
+    }
+
+    /** session public_id → 数字主键 id；解析不到抛资源不存在。 */
+    public Long resolveSessionId(String sessionPublicId) {
+        Long id = sessionMapper.selectIdByPublicId(sessionPublicId);
+        if (id == null) {
+            throw new BusinessException(ResultCode.AI_CHAT_SESSION_NOT_FOUND);
+        }
+        return id;
+    }
+
     /** 校验 Agent 存在且属于该 owner，返回实体。 */
     public AiAgent requireOwned(Long ownerUserId, Long agentId) {
         AiAgent a = agentMapper.selectOneById(agentId);
@@ -101,8 +121,9 @@ public class AiAgentService {
     }
 
     public ChatSessionVO createSession(Long ownerUserId, Long agentId, CreateSessionRequest req) {
-        requireOwned(ownerUserId, agentId);
+        AiAgent agent = requireOwned(ownerUserId, agentId);
         AiChatSession s = new AiChatSession();
+        s.setPublicId(UUID.randomUUID().toString());
         s.setAgentId(agentId);
         s.setOwnerUserId(ownerUserId);
         s.setTitle(req == null ? null : req.getTitle());
@@ -110,15 +131,17 @@ public class AiAgentService {
         s.setCreatedAt(now);
         s.setUpdatedAt(now);
         sessionMapper.insert(s);
-        return ChatSessionVO.from(s);
+        return ChatSessionVO.from(s, agent.getPublicId());
     }
 
     public List<ChatSessionVO> listSessions(Long ownerUserId, Long agentId) {
-        requireOwned(ownerUserId, agentId);
+        AiAgent agent = requireOwned(ownerUserId, agentId);
         QueryWrapper qw = QueryWrapper.create()
                 .where("agent_id = ?", agentId)
                 .orderBy("id desc");
-        return sessionMapper.selectListByQuery(qw).stream().map(ChatSessionVO::from).toList();
+        return sessionMapper.selectListByQuery(qw).stream()
+                .map(s -> ChatSessionVO.from(s, agent.getPublicId()))
+                .toList();
     }
 
     private static String blankTo(String v, String fallback) {

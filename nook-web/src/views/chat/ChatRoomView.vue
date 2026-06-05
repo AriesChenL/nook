@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/composables/useConfirm'
 import {
   getConversation,
   listMessages,
@@ -25,10 +26,11 @@ import { usePresenceStore } from '@/stores/presence'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const conversationId = computed(() => Number(route.params.id))
+const conversationId = computed(() => String(route.params.id))
 
 const messages = ref<Message[]>([])
 const draft = ref('')
+const composerEl = ref<HTMLTextAreaElement | null>(null)
 const loading = ref(true)
 const sending = ref(false)
 const uploading = ref(false)
@@ -126,6 +128,9 @@ async function onSend() {
     ElMessage.error(e?.message ?? '发送失败')
   } finally {
     sending.value = false
+    // 发送完成（textarea 因 disabled 失焦）后重新聚焦，方便连续输入
+    await nextTick()
+    composerEl.value?.focus()
   }
 }
 
@@ -164,15 +169,8 @@ async function onFileChange(e: Event) {
 }
 
 async function onRecall(m: Message) {
-  try {
-    await ElMessageBox.confirm('撤回这条消息？', '提示', {
-      type: 'warning',
-      confirmButtonText: '撤回',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({ message: '撤回这条消息？', confirmText: '撤回', danger: true })
+  if (!ok) return
   try {
     await recallMessage(m.id)
     m.recalled = true
@@ -188,7 +186,7 @@ interface ReadInfo {
   readCount: number
   total: number
 }
-const readMap = ref<Record<number, ReadInfo>>({})
+const readMap = ref<Record<string, ReadInfo>>({})
 
 async function loadRead(m: Message) {
   if (readMap.value[m.id]?.loading) return
@@ -223,7 +221,7 @@ function onKeydown(e: KeyboardEvent) {
 
 // ───── WebSocket 实时 ─────
 async function onPush(frame: { data?: unknown }) {
-  const raw = frame.data as { conversationId?: number } | undefined
+  const raw = frame.data as { conversationId?: string } | undefined
   if (!raw || raw.conversationId !== conversationId.value) return
   const msg = await decodeIncoming(raw)
   if (messages.value.some((m) => m.id === msg.id)) return
@@ -233,7 +231,7 @@ async function onPush(frame: { data?: unknown }) {
 }
 
 function onRecallPush(frame: { data?: unknown }) {
-  const d = frame.data as { conversationId?: number; messageId?: number } | undefined
+  const d = frame.data as { conversationId?: string; messageId?: string } | undefined
   if (!d || d.conversationId !== conversationId.value) return
   const m = messages.value.find((x) => x.id === d.messageId)
   if (m) {
@@ -260,12 +258,15 @@ onUnmounted(() => {
 <template>
   <div class="room">
     <header class="room-head">
-      <div class="room-title">
-        <h3>{{ title }}</h3>
-        <span class="sub">
-          <span v-if="!isGroup" class="online-dot" :class="{ off: !peerOnline }" />
-          {{ subtitle }}
-        </span>
+      <div class="room-left">
+        <span class="head-avatar">{{ (title?.[0] ?? '?').toUpperCase() }}</span>
+        <div class="room-title">
+          <h3>{{ title }}</h3>
+          <span class="sub">
+            <span v-if="!isGroup" class="online-dot" :class="{ off: !peerOnline }" />
+            {{ subtitle }}
+          </span>
+        </div>
       </div>
       <div class="room-actions">
         <button class="icon-btn" type="button" aria-label="电话">
@@ -362,6 +363,7 @@ onUnmounted(() => {
         <span v-else class="up-pct">{{ uploadPct }}%</span>
       </button>
       <textarea
+        ref="composerEl"
         v-model="draft"
         rows="1"
         placeholder="输入消息，Enter 发送 · Shift+Enter 换行"
@@ -410,6 +412,27 @@ onUnmounted(() => {
   background: var(--nook-surface);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+.room-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.head-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
+  background: var(--nook-gradient-brand);
+  color: #fff;
+  font-family: var(--nook-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: var(--shadow-sm);
 }
 .room-title h3 {
   margin: 0;
@@ -632,10 +655,10 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 
 /* 自己消息（右侧）*/
 .msg.mine .bubble {
-  background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%);
-  border-color: transparent;
-  color: #fff;
-  box-shadow: 0 2px 8px -2px rgba(15, 118, 110, 0.35);
+  background: var(--nook-bubble-mine-bg);
+  border-color: var(--nook-bubble-mine-border);
+  color: var(--nook-bubble-mine-fg);
+  box-shadow: var(--nook-bubble-mine-shadow);
   border-radius: 18px 4px 4px 18px;
 }
 .msg.mine.group-first .bubble {

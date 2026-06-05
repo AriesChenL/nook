@@ -12,7 +12,7 @@ const emit = defineEmits<{
 
 const friends = ref<Friend[]>([])
 const loading = ref(false)
-const selected = ref<Set<number>>(new Set())
+const selected = ref<Set<string>>(new Set())
 const groupName = ref('')
 const keyword = ref('')
 const submitting = ref(false)
@@ -45,7 +45,7 @@ watch(
   }
 )
 
-function toggle(id: number) {
+function toggle(id: string) {
   const s = new Set(selected.value)
   if (s.has(id)) s.delete(id)
   else s.add(id)
@@ -306,7 +306,7 @@ html.dark .chip {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
@@ -345,7 +345,7 @@ html.dark .chip {
   transition: filter 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 .btn.primary {
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
 }
 .btn.primary:hover:not(:disabled) {

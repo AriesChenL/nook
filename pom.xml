@@ -35,7 +35,7 @@
         <lombok.version>1.18.46</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <spring-ai.version>1.0.0</spring-ai.version>
-        <agentscope.version>1.1.0-RC2</agentscope.version>
+        <agentscope.version>2.0.0-RC1</agentscope.version>
         <mybatis-flex.version>1.10.9</mybatis-flex.version>
         <postgresql.version>42.7.4</postgresql.version>
         <rocketmq-spring.version>2.3.3</rocketmq-spring.version>
@@ -53,6 +53,19 @@
                 <version>${nook.version}</version>
             </dependency>
 
+            <!-- 重新以 import 优先级声明 Boot 3.5.14 的全部受管版本（Spring / Reactor / Netty 等），
+                 必须放在 agentscope-dependencies-bom 之前。
+                 agentscope BOM 面向 Spring Boot 4 / Spring 7，会把 spring-webflux、reactor-netty、netty
+                 拉到不兼容的新版本，导致 ApiVersionHolder / MultiThreadIoEventLoopGroup 等 ClassNotFound。
+                 父 POM(spring-boot-starter-parent) 的受管版本优先级低于任何 import BOM，故在此显式 import。 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.5.14</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
@@ -61,7 +74,8 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- agentscope-java：HarnessAgent（ReAct + 工作区/记忆/会话）。harness 仅发布 1.1.0-RC 系列 -->
+            <!-- agentscope-java：HarnessAgent（ReAct + 工作区/记忆/会话）。当前 2.0.0-RC1；
+                 其 BOM 面向 Spring Boot 4 / Spring 7，已被上方 spring-boot-dependencies 锁版覆盖，仅取 agentscope 自身制品 -->
             <dependency>
                 <groupId>io.agentscope</groupId>
                 <artifactId>agentscope-dependencies-bom</artifactId>

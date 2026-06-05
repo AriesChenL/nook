@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -14,9 +14,11 @@ import {
 } from '@/api/user'
 import { getOrCreateDirect } from '@/api/im'
 import { usePresenceStore } from '@/stores/presence'
+import { useFriendStore } from '@/stores/friends'
 
 const router = useRouter()
 const presence = usePresenceStore()
+const friendStore = useFriendStore()
 
 type Tab = 'friends' | 'requests' | 'add'
 
@@ -41,14 +43,35 @@ const grouped = computed(() => {
 
 const pendingRequests = computed(() => requests.value.filter((r) => r.status === 0))
 
-onMounted(async () => {
+// 拉取好友 + 申请；silent=true 用于轮询，不显示骨架屏、失败不打扰
+async function refresh(silent = false) {
+  if (!silent) loading.value = true
   try {
     const [fs, rs] = await Promise.all([listFriends(), listFriendRequests()])
     friends.value = fs
     requests.value = rs
+    friendStore.pendingCount = rs.filter((r) => r.status === 0).length // 同步侧栏角标
+  } catch {
+    /* 轮询失败静默处理 */
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
+}
+
+// 轮询：好友申请被对方通过 / 收到新申请时，本端自动同步（无 WS 推送时的兜底）
+const POLL_MS = 15000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  refresh()
+  pollTimer = setInterval(() => {
+    // 页面不可见时不拉，省掉无效请求
+    if (!document.hidden) refresh(true)
+  }, POLL_MS)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 
 async function onSearch() {
@@ -69,6 +92,7 @@ async function onAccept(r: FriendRequest) {
   try {
     await acceptFriendRequest(r.id)
     r.status = 1
+    friendStore.pendingCount = pendingRequests.value.length // 角标即时 -1
     ElMessage.success(`已接受 ${r.fromNickname} 的好友申请`)
   } catch (e: any) {
     ElMessage.error(e?.message ?? '操作失败')
@@ -78,6 +102,7 @@ async function onReject(r: FriendRequest) {
   try {
     await rejectFriendRequest(r.id)
     r.status = 2
+    friendStore.pendingCount = pendingRequests.value.length // 角标即时 -1
   } catch (e: any) {
     ElMessage.error(e?.message ?? '操作失败')
   }
@@ -265,6 +290,12 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
 }
 .body::-webkit-scrollbar { width: 6px; }
 .body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+/* 宽屏下把列表收进阅读列，左对齐与标题对齐，避免整行铺满、按钮被甩到最右 */
+.friends,
+.requests,
+.add {
+  max-width: 720px;
+}
 
 .empty {
   padding: 40px 0;
@@ -306,7 +337,7 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
@@ -398,7 +429,7 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
   transition: filter 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 .btn.primary {
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.06); }

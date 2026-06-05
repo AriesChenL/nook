@@ -7,7 +7,8 @@ import lombok.Data;
 @AllArgsConstructor
 public class LoginResponse {
 
-    private Long userId;
+    /** 用户对外标识：public_id（脱敏，字符串）。已移除数字 userId。 */
+    private String userId;
     private String username;
     private String nickname;
     private String token;

@@ -18,7 +18,7 @@ services:
       - ./sql:/docker-entrypoint-initdb.d:ro
 
   redis:
-    image: redis:8.6
+    image: redis:latest
     container_name: nook-redis
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "redis123", "--appendonly", "yes"]

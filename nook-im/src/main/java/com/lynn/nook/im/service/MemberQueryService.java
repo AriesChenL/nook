@@ -1,7 +1,5 @@
 package com.lynn.nook.im.service;
 
-import com.lynn.nook.common.result.Result;
-import com.lynn.nook.im.client.UserClient;
 import com.lynn.nook.im.dto.MemberVO;
 import com.lynn.nook.im.dto.UserBriefVO;
 import com.lynn.nook.im.entity.ConversationMember;
@@ -13,12 +11,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
- * 群成员资料聚合：会话成员关系（role/joinedAt）+ 跨 nook-user 取到的公开资料（昵称/头像）。
- * nook-user 不可用时优雅降级，仅返回 userId + role，昵称/头像为 null，不影响主流程。
+ * 群成员资料聚合：会话成员关系（role/joinedAt）+ 跨 nook-user 取到的公开资料（昵称/头像 + public_id）。
+ * nook-user 不可用时优雅降级：userId（public_id）/昵称/头像可能为 null，不影响主流程。
  */
 @Slf4j
 @Service
@@ -27,9 +23,9 @@ public class MemberQueryService {
 
     private final ConversationService conversationService;
     private final ConversationMemberMapper memberMapper;
-    private final UserClient userClient;
+    private final IdResolver idResolver;
 
-    /** 列出会话成员（含资料）。调用方必须是该会话成员。 */
+    /** 列出会话成员（含资料）。调用方必须是该会话成员。userId 输出 user public_id。 */
     public List<MemberVO> listMembers(Long currentUserId, Long conversationId) {
         conversationService.requireMember(conversationId, currentUserId);
 
@@ -39,12 +35,13 @@ public class MemberQueryService {
         if (rows.isEmpty()) return List.of();
 
         List<Long> userIds = rows.stream().map(ConversationMember::getUserId).toList();
-        Map<Long, UserBriefVO> profiles = fetchProfiles(userIds);
+        // 数字 userId → UserBriefVO(id=public_id, 昵称/头像)；nook-user 不可用时为空 map（降级）
+        Map<Long, UserBriefVO> profiles = idResolver.userProfilesByNumericId(userIds);
 
         return rows.stream().map(m -> {
             UserBriefVO p = profiles.get(m.getUserId());
             return MemberVO.builder()
-                    .userId(m.getUserId())
+                    .userId(p == null ? null : p.getId())
                     .role(m.getRole())
                     .joinedAt(m.getJoinedAt())
                     .username(p == null ? null : p.getUsername())
@@ -52,19 +49,5 @@ public class MemberQueryService {
                     .avatarUrl(p == null ? null : p.getAvatarUrl())
                     .build();
         }).toList();
-    }
-
-    /** 批量取资料；任何失败都降级为空 map，让上层只返回 id。 */
-    private Map<Long, UserBriefVO> fetchProfiles(List<Long> userIds) {
-        try {
-            Result<List<UserBriefVO>> resp = userClient.listByIds(userIds);
-            if (resp == null || resp.getData() == null) return Map.of();
-            return resp.getData().stream()
-                    .filter(u -> u.getId() != null)
-                    .collect(Collectors.toMap(UserBriefVO::getId, Function.identity(), (a, b) -> a));
-        } catch (Exception e) {
-            log.warn("聚合群成员资料失败，降级为仅返回 id：{}", e.getMessage());
-            return Map.of();
-        }
     }
 }

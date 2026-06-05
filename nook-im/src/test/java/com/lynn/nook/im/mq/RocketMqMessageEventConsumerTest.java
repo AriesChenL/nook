@@ -23,7 +23,7 @@ class RocketMqMessageEventConsumerTest {
 
     @Test
     void onMessage_pushesToLocalMembers() {
-        MessageVO msg = MessageVO.builder().id(42L).conversationId(7L).build();
+        MessageVO msg = MessageVO.builder().id("m42").conversationId("c7").build();
         NewMessageEvent event = NewMessageEvent.builder()
                 .conversationId(7L)
                 .memberUserIds(List.of(100L, 200L))

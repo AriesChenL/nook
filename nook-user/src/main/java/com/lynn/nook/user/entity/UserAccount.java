@@ -19,6 +19,10 @@ public class UserAccount {
     @Id(keyType = KeyType.Auto)
     private Long id;
 
+    /** 对外不可枚举的业务标识（UUID）。内部主键仍用数字 id。 */
+    @Column("public_id")
+    private String publicId;
+
     private String username;
 
     private String nickname;

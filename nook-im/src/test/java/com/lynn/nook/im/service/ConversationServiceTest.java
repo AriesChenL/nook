@@ -32,6 +32,7 @@ class ConversationServiceTest {
     private ConversationMemberMapper memberMapper;
     private MessageMapper messageMapper;
     private SystemMessageService systemMessageService;
+    private IdResolver idResolver;
     private ConversationService service;
 
     @BeforeEach
@@ -40,9 +41,13 @@ class ConversationServiceTest {
         memberMapper = mock(ConversationMemberMapper.class);
         messageMapper = mock(MessageMapper.class);
         systemMessageService = mock(SystemMessageService.class);
-        service = new ConversationService(conversationMapper, memberMapper, messageMapper, systemMessageService);
+        idResolver = mock(IdResolver.class);
+        service = new ConversationService(conversationMapper, memberMapper, messageMapper,
+                systemMessageService, idResolver);
         // buildVO 会查成员列表，统一返回空，避免 NPE（不影响被测断言）
         when(memberMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of());
+        // buildVO 会调 idResolver 做脱敏，统一返回空 map（不影响群聊权限/角色断言）
+        lenient().when(idResolver.userPublicIds(any())).thenReturn(Map.of());
     }
 
     private ConversationMember member(Long convId, Long userId, short role) {
@@ -69,14 +74,16 @@ class ConversationServiceTest {
     void createGroup_addsOwnerAndDedupedMembers() {
         CreateGroupRequest req = new CreateGroupRequest();
         req.setName("小组");
-        req.setMemberIds(List.of(2L, 3L, 3L, 1L)); // 含重复 3L 和创建者 1L
+        // 含重复 3L 和创建者 1L；memberIds 已由 controller 解析为数字，单独以参数传入
+        List<Long> memberIds = List.of(2L, 3L, 3L, 1L);
 
         doAnswer(inv -> { ((Conversation) inv.getArgument(0)).setId(100L); return 1; })
                 .when(conversationMapper).insert(any(Conversation.class));
 
-        ConversationVO vo = service.createGroup(1L, req);
+        ConversationVO vo = service.createGroup(1L, req, memberIds);
 
-        assertThat(vo.getId()).isEqualTo(100L);
+        // id 输出会话 public_id（建群时 Java 层生成的 UUID）
+        assertThat(vo.getId()).isNotBlank();
         ArgumentCaptor<ConversationMember> cap = ArgumentCaptor.forClass(ConversationMember.class);
         verify(memberMapper, times(3)).insert(cap.capture()); // owner + 2 + 3
         List<ConversationMember> added = cap.getAllValues();

@@ -20,6 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +33,10 @@ public class MessageService {
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;
     private final MessageEventPublisher eventPublisher;
+    private final IdResolver idResolver;
 
     @Transactional
-    public MessageVO send(Long senderId, SendMessageRequest req) {
+    public MessageVO send(Long senderId, Long conversationId, SendMessageRequest req) {
         short type = req.getContentType() == null ? Message.TYPE_TEXT : req.getContentType();
         boolean isFile = type == Message.TYPE_IMAGE || type == Message.TYPE_FILE;
         if (isFile) {
@@ -44,10 +47,11 @@ public class MessageService {
         } else if (req.getContent() == null || req.getContent().isBlank()) {
             throw new BusinessException(ResultCode.MESSAGE_CONTENT_EMPTY);
         }
-        conversationService.requireMember(req.getConversationId(), senderId);
+        conversationService.requireMember(conversationId, senderId);
 
         Message m = new Message();
-        m.setConversationId(req.getConversationId());
+        m.setPublicId(UUID.randomUUID().toString());
+        m.setConversationId(conversationId);
         m.setSenderId(senderId);
         m.setContentType(type);
         // content 列 NOT NULL：文件消息 content 为空时用文件名兜底（也便于会话列表预览）
@@ -66,12 +70,13 @@ public class MessageService {
         m.setCreatedAt(OffsetDateTime.now());
         messageMapper.insert(m);
 
-        conversationService.onMessageSent(req.getConversationId(), m.getId(), m.getCreatedAt());
+        conversationService.onMessageSent(conversationId, m.getId(), m.getCreatedAt());
 
-        MessageVO vo = MessageVO.from(m);
+        // 脱敏：id=消息 public_id、conversationId=会话 public_id、senderId=发送者 user public_id
+        MessageVO vo = idResolver.toMessageVO(m, req.getConversationId());
         NewMessageEvent event = NewMessageEvent.builder()
-                .conversationId(req.getConversationId())
-                .memberUserIds(conversationService.listMemberIds(req.getConversationId()))
+                .conversationId(conversationId)
+                .memberUserIds(conversationService.listMemberIds(conversationId))
                 .message(vo)
                 .build();
         runAfterCommit(() -> eventPublisher.publishNewMessage(event));
@@ -105,9 +110,9 @@ public class MessageService {
             qw.and("id < ?", beforeId);
         }
         qw.orderBy("id desc").limit(safeLimit);
-        return messageMapper.selectListByQuery(qw).stream()
-                .map(MessageVO::from)
-                .toList();
+        List<Message> rows = messageMapper.selectListByQuery(qw);
+        String convPublicId = idResolver.conversationPublicId(conversationId);
+        return idResolver.toMessageVOs(rows, convPublicId);
     }
 
     /** 消息已读状态（群聊已读人数）：调用方需为会话成员。 */
@@ -120,12 +125,13 @@ public class MessageService {
         int totalRecipients = (int) conversationService.listMemberIds(m.getConversationId()).stream()
                 .filter(id -> !id.equals(m.getSenderId()))
                 .count();
+        Map<Long, String> readerPub = idResolver.userPublicIds(readers);
         return ReadStatusVO.builder()
-                .messageId(messageId)
-                .conversationId(m.getConversationId())
+                .messageId(m.getPublicId())
+                .conversationId(idResolver.conversationPublicId(m.getConversationId()))
                 .totalRecipients(totalRecipients)
                 .readCount(readers.size())
-                .readerUserIds(readers)
+                .readerUserIds(readers.stream().map(readerPub::get).toList())
                 .build();
     }
 
@@ -151,9 +157,12 @@ public class MessageService {
         messageMapper.update(m);
 
         // 撤回事件走与新消息一致的发布链路：本地直推或 MQ broadcasting（多实例），事务提交后才发
+        // 帧内 id 用 public_id（脱敏）；memberUserIds 保持数字供内部路由
         RecallEvent event = RecallEvent.builder()
                 .conversationId(m.getConversationId())
                 .messageId(m.getId())
+                .conversationPublicId(idResolver.conversationPublicId(m.getConversationId()))
+                .messagePublicId(m.getPublicId())
                 .memberUserIds(conversationService.listMemberIds(m.getConversationId()))
                 .build();
         runAfterCommit(() -> eventPublisher.publishRecall(event));

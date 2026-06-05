@@ -24,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,6 +35,7 @@ public class ConversationService {
     private final ConversationMemberMapper memberMapper;
     private final MessageMapper messageMapper;
     private final SystemMessageService systemMessageService;
+    private final IdResolver idResolver;
 
     /** 获取或创建单聊会话。 */
     @Transactional
@@ -48,6 +50,7 @@ public class ConversationService {
         }
 
         Conversation c = new Conversation();
+        c.setPublicId(UUID.randomUUID().toString());
         c.setType(Conversation.TYPE_DIRECT);
         c.setCreatedAt(OffsetDateTime.now());
         c.setUpdatedAt(OffsetDateTime.now());
@@ -72,13 +75,31 @@ public class ConversationService {
         List<Conversation> convs = conversationMapper.selectListByIds(convIds);
         Map<Long, List<Long>> membersByConv = loadMemberIds(convIds);
 
+        // 批量预解析：所有涉及的 user id（成员 + 群主）→ public_id，所有 lastMessageId → public_id
+        Set<Long> allUserIds = new LinkedHashSet<>();
+        Set<Long> allMsgIds = new LinkedHashSet<>();
+        for (Conversation c : convs) {
+            allUserIds.addAll(membersByConv.getOrDefault(c.getId(), List.of()));
+            if (c.getOwnerId() != null) allUserIds.add(c.getOwnerId());
+            if (c.getLastMessageId() != null) allMsgIds.add(c.getLastMessageId());
+            ConversationMember mm = myMemberByConv.get(c.getId());
+            if (mm != null && mm.getLastReadMsgId() != null && mm.getLastReadMsgId() > 0) {
+                allMsgIds.add(mm.getLastReadMsgId());
+            }
+        }
+        Map<Long, String> userPub = idResolver.userPublicIds(allUserIds);
+        Map<Long, String> msgPub = messagePublicIds(allMsgIds);
+
         List<ConversationVO> result = new ArrayList<>(convs.size());
         for (Conversation c : convs) {
             ConversationVO vo = ConversationVO.from(c);
-            vo.setMemberIds(membersByConv.getOrDefault(c.getId(), List.of()));
+            List<Long> memberNumIds = membersByConv.getOrDefault(c.getId(), List.of());
+            vo.setMemberIds(memberNumIds.stream().map(userPub::get).toList());
+            vo.setOwnerId(c.getOwnerId() == null ? null : userPub.get(c.getOwnerId()));
+            vo.setLastMessageId(c.getLastMessageId() == null ? null : msgPub.get(c.getLastMessageId()));
             ConversationMember mm = myMemberByConv.get(c.getId());
             Long lastRead = mm == null || mm.getLastReadMsgId() == null ? 0L : mm.getLastReadMsgId();
-            vo.setLastReadMsgId(lastRead);
+            vo.setLastReadMsgId(lastRead > 0 ? msgPub.get(lastRead) : null);
             vo.setMyRole(mm == null ? null : mm.getRole());
             vo.setUnreadCount(countUnread(c.getId(), userId, lastRead));
             result.add(vo);
@@ -109,9 +130,10 @@ public class ConversationService {
 
     /** 创建群聊：创建者自动成为群主，初始成员去重并排除创建者自身。 */
     @Transactional
-    public ConversationVO createGroup(Long ownerId, CreateGroupRequest req) {
+    public ConversationVO createGroup(Long ownerId, CreateGroupRequest req, List<Long> memberIds) {
         OffsetDateTime now = OffsetDateTime.now();
         Conversation c = new Conversation();
+        c.setPublicId(UUID.randomUUID().toString());
         c.setType(Conversation.TYPE_GROUP);
         c.setName(req.getName());
         c.setAvatarUrl(req.getAvatarUrl());
@@ -120,7 +142,7 @@ public class ConversationService {
         c.setUpdatedAt(now);
         conversationMapper.insert(c);
 
-        List<Long> invited = dedupExclude(req.getMemberIds(), ownerId);
+        List<Long> invited = dedupExclude(memberIds, ownerId);
         addMember(c.getId(), ownerId, ConversationMember.ROLE_OWNER);
         for (Long uid : invited) {
             addMember(c.getId(), uid, ConversationMember.ROLE_MEMBER);
@@ -374,14 +396,44 @@ public class ConversationService {
         ConversationVO vo = ConversationVO.from(c);
         List<ConversationMember> ms = memberMapper.selectListByQuery(QueryWrapper.create()
                 .where("conversation_id = ?", c.getId()));
-        vo.setMemberIds(ms.stream().map(ConversationMember::getUserId).toList());
+        List<Long> memberNumIds = ms.stream().map(ConversationMember::getUserId).toList();
+
+        // 数字 user id → public_id（含群主）
+        Set<Long> userIds = new LinkedHashSet<>(memberNumIds);
+        if (c.getOwnerId() != null) userIds.add(c.getOwnerId());
+        Map<Long, String> userPub = idResolver.userPublicIds(userIds);
+
         ConversationMember mine = ms.stream()
                 .filter(m -> m.getUserId().equals(currentUserId)).findFirst().orElse(null);
         Long lastRead = mine == null || mine.getLastReadMsgId() == null ? 0L : mine.getLastReadMsgId();
-        vo.setLastReadMsgId(lastRead);
+
+        // 消息 id → public_id（lastMessage + 我的已读游标）
+        Set<Long> msgIds = new LinkedHashSet<>();
+        if (c.getLastMessageId() != null) msgIds.add(c.getLastMessageId());
+        if (lastRead > 0) msgIds.add(lastRead);
+        Map<Long, String> msgPub = messagePublicIds(msgIds);
+
+        vo.setMemberIds(memberNumIds.stream().map(userPub::get).toList());
+        vo.setOwnerId(c.getOwnerId() == null ? null : userPub.get(c.getOwnerId()));
+        vo.setLastMessageId(c.getLastMessageId() == null ? null : msgPub.get(c.getLastMessageId()));
+        vo.setLastReadMsgId(lastRead > 0 ? msgPub.get(lastRead) : null);
         vo.setMyRole(mine == null ? null : mine.getRole());
         vo.setUnreadCount(countUnread(c.getId(), currentUserId, lastRead));
         return vo;
+    }
+
+    /** 批量：数字消息 id → public_id 映射（本库 messages 表）。 */
+    private Map<Long, String> messagePublicIds(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        String placeholders = ids.stream().map(x -> "?").collect(Collectors.joining(","));
+        List<com.lynn.nook.im.entity.Message> rows = messageMapper.selectListByQuery(QueryWrapper.create()
+                .select("id", "public_id")
+                .where("id in (" + placeholders + ")", ids.toArray()));
+        Map<Long, String> map = new HashMap<>();
+        for (com.lynn.nook.im.entity.Message m : rows) {
+            map.put(m.getId(), m.getPublicId());
+        }
+        return map;
     }
 
     /** 获取会话成员 userId 列表（不含会话校验）。 */

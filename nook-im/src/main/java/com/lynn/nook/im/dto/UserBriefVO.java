@@ -12,7 +12,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UserBriefVO {
 
-    private Long id;
+    /** user 的 public_id（脱敏对外标识，字符串），由 nook-user /user/batch 输出。 */
+    private String id;
     private String username;
     private String nickname;
     private String avatarUrl;

@@ -18,7 +18,7 @@ class NewMessageEventTest {
                 .conversationId(10L)
                 .memberUserIds(List.of(1L, 2L, 3L))
                 .message(MessageVO.builder()
-                        .id(99L).conversationId(10L).senderId(1L)
+                        .id("m99").conversationId("c10").senderId("u1")
                         .contentType((short) 1).content("hello")
                         .createdAt(OffsetDateTime.parse("2026-05-27T10:00:00+08:00"))
                         .build())
@@ -29,7 +29,7 @@ class NewMessageEventTest {
 
         assertThat(decoded.getConversationId()).isEqualTo(10L);
         assertThat(decoded.getMemberUserIds()).containsExactly(1L, 2L, 3L);
-        assertThat(decoded.getMessage().getId()).isEqualTo(99L);
+        assertThat(decoded.getMessage().getId()).isEqualTo("m99");
         assertThat(decoded.getMessage().getContent()).isEqualTo("hello");
         assertThat(decoded.getMessage().getCreatedAt()).isEqualTo(original.getMessage().getCreatedAt());
     }

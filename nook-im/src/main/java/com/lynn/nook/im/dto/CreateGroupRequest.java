@@ -17,7 +17,7 @@ public class CreateGroupRequest {
     @Size(max = 512)
     private String avatarUrl;
 
-    /** 初始成员（不含创建者本人；创建者会自动作为群主加入）。 */
+    /** 初始成员的 user public_id（不含创建者本人；创建者会自动作为群主加入）。 */
     @NotEmpty
-    private List<Long> memberIds;
+    private List<String> memberIds;
 }

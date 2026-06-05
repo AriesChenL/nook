@@ -1,7 +1,7 @@
 :root {
   --nook-font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --nook-font-display: 'Space Grotesk', var(--nook-font-sans);
+  --nook-font-display: 'Clash Display', 'DM Sans', system-ui, sans-serif;
 
   /* Mint Aurora · Teal + Sunset Orange */
   --nook-primary: #14b8a6;       /* teal 500 */
@@ -13,9 +13,48 @@
 
   --nook-text: #0f3a36;
   --nook-text-muted: #4b5b59;
-  --nook-surface: rgba(255, 255, 255, 0.78);
+  --nook-text-faint: #7c8a88;
+
+  /* 表面 / 玻璃质感 —— 分两级，卡片用 raised，浮层用 overlay */
+  --nook-surface: rgba(255, 255, 255, 0.72);
+  --nook-surface-raised: rgba(255, 255, 255, 0.86);
+  --nook-surface-sunken: rgba(15, 118, 110, 0.05);
   --nook-surface-border: rgba(20, 184, 166, 0.18);
-  --nook-shadow: 0 30px 80px -20px rgba(15, 118, 110, 0.28);
+  --nook-hairline: rgba(15, 58, 54, 0.08);
+
+  /* 品牌渐变 —— 全站统一引用，避免各处手写 */
+  --nook-gradient-brand: linear-gradient(135deg, #0f766e 0%, #14b8a6 42%, #fb923c 100%);
+  --nook-gradient-teal: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 45%, #0f766e 100%);
+  --nook-gradient-warm: linear-gradient(135deg, #fbbf24 0%, #fb923c 55%, #f97316 100%);
+  --nook-gradient-wash: linear-gradient(135deg, rgba(20, 184, 166, 0.16), rgba(251, 146, 60, 0.12));
+
+  /* 自己/用户消息气泡 —— 浅色用浅青绿填充 + 深青绿字，清爽好读 */
+  --nook-bubble-mine-bg: linear-gradient(135deg, #d7fbf3 0%, #b9f5e8 100%);
+  --nook-bubble-mine-fg: var(--nook-primary-deep);
+  --nook-bubble-mine-border: rgba(20, 184, 166, 0.28);
+  --nook-bubble-mine-shadow: 0 8px 20px -14px rgba(15, 118, 110, 0.45);
+
+  /* 圆角层级 */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* 阴影层级 + 光晕 */
+  --shadow-sm: 0 2px 8px -2px rgba(15, 118, 110, 0.14);
+  --shadow-md: 0 14px 34px -16px rgba(15, 118, 110, 0.32);
+  --shadow-lg: 0 30px 80px -20px rgba(15, 118, 110, 0.28);
+  --shadow-glow: 0 0 0 1px rgba(20, 184, 166, 0.35), 0 8px 28px -8px rgba(20, 184, 166, 0.5);
+  --nook-shadow: var(--shadow-lg); /* 兼容旧引用 */
+
+  /* 动效 token */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
 
   --el-color-primary: #14b8a6;
   --el-color-primary-light-3: #2dd4bf;
@@ -23,14 +62,32 @@
   --el-color-primary-light-7: #99f6e4;
   --el-color-primary-light-9: #ccfbf1;
   --el-color-primary-dark-2: #0f766e;
+  --el-border-radius-base: 12px;
 }
 
 html.dark {
   --nook-text: #ecfdf5;
   --nook-text-muted: #99f6e4;
-  --nook-surface: rgba(6, 50, 47, 0.55);
-  --nook-surface-border: rgba(94, 234, 212, 0.22);
-  --nook-shadow: 0 30px 80px -20px rgba(2, 12, 11, 0.7);
+  --nook-text-faint: #6b9b94;
+
+  --nook-surface: rgba(6, 50, 47, 0.52);
+  --nook-surface-raised: rgba(8, 58, 54, 0.7);
+  --nook-surface-sunken: rgba(94, 234, 212, 0.06);
+  --nook-surface-border: rgba(94, 234, 212, 0.2);
+  --nook-hairline: rgba(94, 234, 212, 0.1);
+
+  --nook-gradient-wash: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(251, 146, 60, 0.14));
+
+  /* 暗色下自己气泡保留深青绿渐变 + 白字 */
+  --nook-bubble-mine-bg: var(--nook-gradient-teal);
+  --nook-bubble-mine-fg: #ecfdf5;
+  --nook-bubble-mine-border: transparent;
+  --nook-bubble-mine-shadow: 0 10px 24px -12px rgba(20, 184, 166, 0.55);
+
+  --shadow-sm: 0 2px 10px -2px rgba(2, 12, 11, 0.5);
+  --shadow-md: 0 16px 40px -18px rgba(2, 12, 11, 0.66);
+  --shadow-lg: 0 30px 80px -20px rgba(2, 12, 11, 0.72);
+  --shadow-glow: 0 0 0 1px rgba(94, 234, 212, 0.4), 0 8px 30px -8px rgba(45, 212, 191, 0.45);
   color-scheme: dark;
 
   /* dark 主题下 EP 会覆盖一遍主色，这里再压回 teal */
@@ -58,19 +115,248 @@ body {
 #app {
   min-height: 100vh;
   min-height: 100dvh;
+  position: relative;
 }
 
 body {
   font-family: var(--nook-font-sans);
   color: var(--nook-text);
-  background: #f0fdfa;
+  background:
+    radial-gradient(78% 60% at 8% -8%, rgba(94, 234, 212, 0.28), transparent 60%),
+    radial-gradient(70% 55% at 100% 8%, rgba(251, 146, 60, 0.16), transparent 58%),
+    radial-gradient(90% 70% at 50% 120%, rgba(20, 184, 166, 0.14), transparent 60%),
+    #f0fdfa;
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  text-rendering: optimizeLegibility;
 }
 
 html.dark body {
-  background: #042f2e;
+  background:
+    radial-gradient(78% 60% at 8% -8%, rgba(13, 92, 83, 0.55), transparent 60%),
+    radial-gradient(70% 55% at 100% 8%, rgba(120, 53, 15, 0.4), transparent 58%),
+    radial-gradient(90% 70% at 50% 120%, rgba(13, 92, 83, 0.4), transparent 60%),
+    #042f2e;
+}
+
+/* 极细颗粒 overlay —— 给纯色/玻璃面增加质感与深度，不可交互 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html.dark body::after {
+  opacity: 0.05;
+}
+
+/* 标题统一显示字体 */
+h1, h2, h3 {
+  font-family: var(--nook-font-display);
+  letter-spacing: -0.01em;
+}
+
+/* 文本选区 */
+::selection {
+  background: rgba(20, 184, 166, 0.28);
+  color: var(--nook-primary-deep);
+}
+html.dark ::selection {
+  background: rgba(94, 234, 212, 0.3);
+  color: #ecfdf5;
+}
+
+/* 统一焦点环 */
+:focus-visible {
+  outline: 2px solid var(--nook-primary);
+  outline-offset: 2px;
+}
+
+/* 细玻璃滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 184, 166, 0.4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.5), rgba(15, 118, 110, 0.5));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.8), rgba(251, 146, 60, 0.6));
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 入场动效工具类 —— 配合 inline animation-delay 做 stagger */
+@keyframes nook-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes nook-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.nook-rise {
+  animation: nook-rise var(--dur-slow) var(--ease-out) both;
+}
+
+/* ───────── Nook 通用表单 / 按钮（弹窗、表单复用，替代 EP 控件）───────── */
+.nk-field { margin-bottom: 16px; }
+.nk-field:last-child { margin-bottom: 0; }
+.nk-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nook-text);
+}
+.nk-label .req { color: var(--nook-accent-deep); margin-left: 2px; }
+.nk-hint { margin: 6px 0 0; font-size: 12px; color: var(--nook-text-faint); line-height: 1.5; }
+
+.nk-input,
+.nk-textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface);
+  color: var(--nook-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+.nk-textarea { resize: vertical; min-height: 76px; }
+.nk-input::placeholder,
+.nk-textarea::placeholder { color: var(--nook-text-faint); }
+.nk-input:hover,
+.nk-textarea:hover { border-color: rgba(20, 184, 166, 0.5); }
+.nk-input:focus,
+.nk-textarea:focus {
+  border-color: var(--nook-primary);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.16);
+}
+
+.nk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-family: var(--nook-font-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), filter var(--dur) var(--ease-out);
+}
+.nk-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.nk-btn--primary {
+  background: var(--nook-gradient-brand);
+  color: #fff;
+  box-shadow: 0 10px 22px -12px rgba(20, 184, 166, 0.8);
+}
+.nk-btn--primary:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+.nk-btn--ghost {
+  background: var(--nook-surface);
+  border-color: var(--nook-surface-border);
+  color: var(--nook-text);
+}
+.nk-btn--ghost:hover:not(:disabled) { border-color: var(--nook-primary); color: var(--nook-primary-deep); background: rgba(20, 184, 166, 0.08); }
+html.dark .nk-btn--ghost:hover:not(:disabled) { color: var(--nook-primary-soft); }
+.nk-btn--danger {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  color: #fff;
+  box-shadow: 0 10px 22px -12px rgba(239, 68, 68, 0.7);
+}
+.nk-btn--danger:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+
+/* ───────── Element Plus 适配 · el-select（触发器 + teleport 浮层）─────────
+   浮层 teleport 到 body，scoped 样式够不到，统一在此覆盖成玻璃/青绿质感 */
+.el-select__wrapper {
+  border-radius: var(--r-sm) !important;
+  background: var(--nook-surface) !important;
+  box-shadow: inset 0 0 0 1px var(--nook-surface-border) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: box-shadow var(--dur) var(--ease-out) !important;
+  min-height: 32px;
+}
+.el-select__wrapper:hover {
+  box-shadow: inset 0 0 0 1px var(--nook-primary) !important;
+}
+.el-select__wrapper.is-focused,
+.el-select__wrapper.is-hovering {
+  box-shadow: inset 0 0 0 1px var(--nook-primary), 0 0 0 4px rgba(20, 184, 166, 0.16) !important;
+}
+.el-select__placeholder,
+.el-select__selected-item {
+  color: var(--nook-text) !important;
+  font-weight: 500;
+}
+.el-select .el-select__caret {
+  color: var(--nook-primary) !important;
+}
+
+/* 下拉浮层 */
+.el-popper.is-light.el-select__popper,
+.el-select-dropdown {
+  border-radius: var(--r-md) !important;
+  border: 1px solid var(--nook-surface-border) !important;
+  background: var(--nook-surface-raised) !important;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: var(--shadow-lg) !important;
+  overflow: hidden;
+}
+.el-select__popper.el-popper .el-popper__arrow::before {
+  background: var(--nook-surface-raised) !important;
+  border-color: var(--nook-surface-border) !important;
+}
+.el-select-dropdown__list {
+  padding: 6px !important;
+}
+.el-select-dropdown__item {
+  border-radius: var(--r-xs) !important;
+  margin: 2px 0;
+  height: 34px;
+  line-height: 34px;
+  color: var(--nook-text) !important;
+  font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.el-select-dropdown__item.is-hovering,
+.el-select-dropdown__item:hover {
+  background: var(--nook-gradient-wash) !important;
+  color: var(--nook-primary-deep) !important;
+}
+html.dark .el-select-dropdown__item.is-hovering,
+html.dark .el-select-dropdown__item:hover {
+  color: var(--nook-primary-soft) !important;
+}
+.el-select-dropdown__item.is-selected {
+  background: var(--nook-gradient-teal) !important;
+  color: #fff !important;
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {

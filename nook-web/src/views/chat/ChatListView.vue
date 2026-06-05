@@ -22,7 +22,7 @@ const filtered = computed(() => {
 
 const activeId = computed(() => {
   const id = route.params.id
-  return typeof id === 'string' ? Number(id) : null
+  return typeof id === 'string' ? id : null
 })
 
 async function reload() {
@@ -39,7 +39,7 @@ function nowHm(): string {
 
 async function onPush(frame: { data?: unknown }) {
   const raw = frame.data as
-    | { conversationId?: number; recalled?: number; contentType?: number; content?: string }
+    | { conversationId?: string; recalled?: number; contentType?: number; content?: string }
     | undefined
   if (!raw?.conversationId) return
   const conv = conversations.value.find((c) => c.id === raw.conversationId)
@@ -264,7 +264,7 @@ html.dark .search input {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);

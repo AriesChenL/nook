@@ -14,9 +14,12 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 public class MessageVO {
 
-    private Long id;
-    private Long conversationId;
-    private Long senderId;
+    /** 消息 public_id（脱敏对外标识）。 */
+    private String id;
+    /** 会话 public_id。 */
+    private String conversationId;
+    /** 发送者 user public_id。 */
+    private String senderId;
     private Short contentType;
     private String content;
     private String fileUrl;
@@ -27,13 +30,15 @@ public class MessageVO {
     private OffsetDateTime recalledAt;
     private OffsetDateTime createdAt;
 
+    /**
+     * 仅拷贝消息自身 public_id 与内容字段。conversationId/senderId（跨实体引用）
+     * 由 service 层经 IdResolver 脱敏后回填——这里先留空。
+     */
     public static MessageVO from(Message m) {
         if (m == null) return null;
         boolean isRecalled = m.getRecalled() != null && m.getRecalled() == 1;
         return MessageVO.builder()
-                .id(m.getId())
-                .conversationId(m.getConversationId())
-                .senderId(m.getSenderId())
+                .id(m.getPublicId())
                 .contentType(m.getContentType())
                 // 撤回后历史回放不返回原文/文件信息，避免泄露
                 .content(isRecalled ? null : m.getContent())

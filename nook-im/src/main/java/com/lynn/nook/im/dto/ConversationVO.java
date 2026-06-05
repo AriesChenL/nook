@@ -15,30 +15,36 @@ import java.util.List;
 @AllArgsConstructor
 public class ConversationVO {
 
-    private Long id;
+    /** 会话 public_id（脱敏对外标识）。 */
+    private String id;
     private Short type;
     private String name;
     private String avatarUrl;
-    private Long ownerId;
-    private Long lastMessageId;
+    /** 群主的 user public_id。 */
+    private String ownerId;
+    /** 最后一条消息的 public_id。 */
+    private String lastMessageId;
     private OffsetDateTime lastMessageAt;
-    private List<Long> memberIds;
+    /** 成员的 user public_id 列表。 */
+    private List<String> memberIds;
     /** 当前用户在该会话中的角色：1=普通 2=管理员 3=群主（单聊恒为 1） */
     private Short myRole;
-    /** 当前用户在该会话中已读到的最大消息 id */
-    private Long lastReadMsgId;
+    /** 当前用户在该会话中已读到的最大消息 public_id。 */
+    private String lastReadMsgId;
     /** 未读数（消息 id 大于 lastReadMsgId 的条数） */
     private Long unreadCount;
 
+    /**
+     * 仅拷贝会话自身的非 id 字段（type/name/avatar/lastMessageAt）与会话自己的 public_id。
+     * ownerId/memberIds/lastMessageId/lastReadMsgId 等跨实体引用由 service 层脱敏后回填。
+     */
     public static ConversationVO from(Conversation c) {
         if (c == null) return null;
         return ConversationVO.builder()
-                .id(c.getId())
+                .id(c.getPublicId())
                 .type(c.getType())
                 .name(c.getName())
                 .avatarUrl(c.getAvatarUrl())
-                .ownerId(c.getOwnerId())
-                .lastMessageId(c.getLastMessageId())
                 .lastMessageAt(c.getLastMessageAt())
                 .build();
     }

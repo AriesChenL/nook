@@ -13,11 +13,15 @@
 }
 
 .auth-form .el-input__wrapper {
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   padding: 4px 14px;
   background: rgba(255, 255, 255, 0.6);
   box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.22);
-  transition: box-shadow 200ms ease, background 200ms ease;
+  transition: box-shadow var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.auth-form .el-input__wrapper:hover {
+  transform: translateY(-1px);
 }
 html.dark .auth-form .el-input__wrapper {
   background: rgba(4, 47, 46, 0.55);
@@ -41,21 +45,36 @@ html.dark .auth-form .el-input__wrapper {
 }
 
 .auth-form .submit-btn {
+  position: relative;
   width: 100%;
-  height: 46px;
-  border-radius: 14px;
+  height: 48px;
+  border-radius: var(--r-sm);
   font-family: var(--nook-font-display);
   font-weight: 600;
   font-size: 15px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
   border: none;
   color: #fff;
   cursor: pointer;
-  transition: box-shadow 200ms ease, transform 200ms ease, filter 200ms ease;
+  overflow: hidden;
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    filter var(--dur) var(--ease-out);
 
   /* light: teal 主导 + 收尾 orange，清爽 */
-  background: linear-gradient(135deg, #0f766e 0%, #14b8a6 40%, #fb923c 100%);
+  background: var(--nook-gradient-brand);
   box-shadow: 0 12px 26px -10px rgba(20, 184, 166, 0.55);
+}
+/* hover 时一道流光扫过 */
+.auth-form .submit-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.auth-form .submit-btn:hover:not(:disabled)::after {
+  transform: translateX(120%);
 }
 html.dark .auth-form .submit-btn {
   /* dark: 暖色主导（amber → orange → 少量 teal），在深墨绿底上跳出来 */

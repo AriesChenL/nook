@@ -12,7 +12,7 @@ export interface RegisterRequest {
 }
 
 export interface LoginResponse {
-  userId: number
+  userId: string // user public_id（字段名仍叫 userId，值=public_id 字符串）
   username: string
   nickname: string
   token: string

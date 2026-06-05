@@ -19,6 +19,10 @@ public class RecallEvent {
 
     private Long conversationId;
     private Long messageId;
-    /** 该会话全体成员 userId。Consumer 据此找本实例在线者并推送撤回。 */
+    /** 会话 public_id（推给前端的撤回帧用）。 */
+    private String conversationPublicId;
+    /** 消息 public_id（推给前端的撤回帧用）。 */
+    private String messagePublicId;
+    /** 该会话全体成员 userId（内部路由用，保持数字）。Consumer 据此找本实例在线者并推送撤回。 */
     private List<Long> memberUserIds;
 }

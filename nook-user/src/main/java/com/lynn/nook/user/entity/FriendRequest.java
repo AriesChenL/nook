@@ -21,6 +21,10 @@ public class FriendRequest {
     @Id(keyType = KeyType.Auto)
     private Long id;
 
+    /** 对外不可枚举的业务标识（UUID）。 */
+    @Column("public_id")
+    private String publicId;
+
     @Column("from_user_id")
     private Long fromUserId;
 

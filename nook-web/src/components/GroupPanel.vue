@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/composables/useConfirm'
 import { listFriends, type Friend } from '@/api/user'
 import {
   ROLE,
@@ -24,7 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const auth = useAuthStore()
-const meId = computed(() => auth.user?.userId ?? 0)
+const meId = computed(() => auth.user?.userId ?? '')
 
 const members = ref<Member[]>([])
 const loading = ref(false)
@@ -35,7 +36,7 @@ const savingName = ref(false)
 // 加成员视图
 const friends = ref<Friend[]>([])
 const friendsLoading = ref(false)
-const picked = ref<Set<number>>(new Set())
+const picked = ref<Set<string>>(new Set())
 const adding = ref(false)
 
 const myRole = computed(() => props.conv.myRole ?? ROLE.MEMBER)
@@ -101,15 +102,8 @@ async function onSaveName() {
 }
 
 async function onKick(m: Member) {
-  try {
-    await ElMessageBox.confirm(`将「${m.nickname}」移出群聊？`, '移出成员', {
-      type: 'warning',
-      confirmButtonText: '移出',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({ title: '移出成员', message: `将「${m.nickname}」移出群聊？`, confirmText: '移出', danger: true })
+  if (!ok) return
   try {
     await removeMember(props.conv.id, m.userId)
     members.value = members.value.filter((x) => x.userId !== m.userId)
@@ -132,15 +126,8 @@ async function onToggleAdmin(m: Member) {
 }
 
 async function onTransfer(m: Member) {
-  try {
-    await ElMessageBox.confirm(`将群主转让给「${m.nickname}」？转让后你将变为普通成员。`, '转让群主', {
-      type: 'warning',
-      confirmButtonText: '转让',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({ title: '转让群主', message: `将群主转让给「${m.nickname}」？转让后你将变为普通成员。`, confirmText: '转让', danger: true })
+  if (!ok) return
   try {
     await transferOwner(props.conv.id, m.userId)
     ElMessage.success('群主已转让')
@@ -156,15 +143,8 @@ async function onLeave() {
     ElMessage.warning('群主需先转让群主才能退群')
     return
   }
-  try {
-    await ElMessageBox.confirm('确定退出该群聊？', '退群', {
-      type: 'warning',
-      confirmButtonText: '退群',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({ title: '退群', message: '确定退出该群聊？', confirmText: '退群', danger: true })
+  if (!ok) return
   try {
     await leaveGroup(props.conv.id)
     ElMessage.success('已退出群聊')
@@ -188,7 +168,7 @@ async function openAdd() {
   }
 }
 
-function togglePick(id: number) {
+function togglePick(id: string) {
   const s = new Set(picked.value)
   if (s.has(id)) s.delete(id)
   else s.add(id)
@@ -467,7 +447,7 @@ html.dark .name-row input {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
@@ -595,7 +575,7 @@ html.dark .role {
 }
 .btn.primary {
   width: 100%;
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
 }
 .name-row .btn.primary {

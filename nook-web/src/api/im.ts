@@ -13,23 +13,23 @@ export const ROLE = { MEMBER: 1, ADMIN: 2, OWNER: 3 } as const
 
 // ───── 后端 VO 形状 ─────
 interface ConversationVO {
-  id: number
+  id: string // 会话 public_id 字符串
   type: number // 1=单聊 2=群聊
   name?: string
   avatarUrl?: string
-  ownerId?: number
-  lastMessageId?: number
+  ownerId?: string // user public_id
+  lastMessageId?: string // 消息 public_id
   lastMessageAt?: string
-  memberIds?: number[]
-  lastReadMsgId?: number
+  memberIds?: string[] // user public_id 列表
+  lastReadMsgId?: string // 消息 public_id
   unreadCount?: number
   myRole?: number // 当前用户在该会话中的角色（单聊恒为普通）
 }
 
 interface MessageVO {
-  id: number
-  conversationId: number
-  senderId: number
+  id: string // 消息 public_id
+  conversationId: string // 会话 public_id
+  senderId: string // user public_id
   contentType: number // 1=text 2=image 3=file 4=系统消息(JSON)
   content?: string
   fileUrl?: string
@@ -42,7 +42,7 @@ interface MessageVO {
 }
 
 interface MemberVO {
-  userId: number
+  userId: string // user public_id
   role: number
   joinedAt?: string
   username?: string
@@ -52,7 +52,7 @@ interface MemberVO {
 
 // ───── 前端 UI 视图模型 ─────
 export interface Conversation {
-  id: number
+  id: string // 会话 public_id
   type: number
   name: string
   avatarUrl?: string
@@ -60,17 +60,17 @@ export interface Conversation {
   lastMessageAt: string
   unread: number
   members?: number
-  peerId?: number
-  ownerId?: number
+  peerId?: string // user public_id
+  ownerId?: string // user public_id
   myRole?: number
-  lastMessageId?: number
-  lastReadMsgId?: number
+  lastMessageId?: string // 消息 public_id
+  lastReadMsgId?: string // 消息 public_id
 }
 
 export interface Message {
-  id: number
-  conversationId: number
-  senderId: number
+  id: string // 消息 public_id
+  conversationId: string
+  senderId: string // user public_id
   senderName: string
   contentType: number
   content: string
@@ -86,7 +86,7 @@ export interface Message {
 }
 
 export interface Member {
-  userId: number
+  userId: string // user public_id
   role: number
   joinedAt?: string
   username?: string
@@ -95,9 +95,10 @@ export interface Member {
 }
 
 // ───── 用户名解析缓存 ─────
-const userCache = new Map<number, UserVO>()
+// userId 为 user public_id 字符串，仅作不透明句柄做相等/Map key，不做数值运算。
+const userCache = new Map<string, UserVO>()
 
-async function resolveUsers(ids: number[]): Promise<void> {
+async function resolveUsers(ids: string[]): Promise<void> {
   const missing = [...new Set(ids)].filter((id) => id && !userCache.has(id))
   if (!missing.length) return
   const fetched = await getUsersByIds(missing).catch(() => [] as UserVO[])
@@ -108,13 +109,13 @@ async function resolveUsers(ids: number[]): Promise<void> {
   })
 }
 
-function userName(id: number): string {
+function userName(id: string): string {
   const u = userCache.get(id)
   return u ? (u.nickname || u.username) : `用户${id}`
 }
 
-function myId(): number {
-  return useAuthStore().user?.userId ?? 0
+function myId(): string {
+  return useAuthStore().user?.userId ?? ''
 }
 
 // ───── 时间/预览格式化 ─────
@@ -140,9 +141,9 @@ function fmtConvTime(iso?: string): string {
 // ───── 系统消息（contentType=4）解析 ─────
 interface SystemPayload {
   action: string
-  operatorId?: number
-  targetId?: number
-  targetIds?: number[]
+  operatorId?: string // user public_id
+  targetId?: string // user public_id
+  targetIds?: string[] // user public_id 列表
   role?: number
 }
 
@@ -157,11 +158,11 @@ function parseSystem(content?: string): SystemPayload | null {
 }
 
 // 系统消息里涉及的所有 userId（提前 resolveUsers，渲染才有名字）
-function systemUserIds(vo: MessageVO): number[] {
+function systemUserIds(vo: MessageVO): string[] {
   if (vo.contentType !== 4) return []
   const p = parseSystem(vo.content)
   if (!p) return []
-  const ids: number[] = []
+  const ids: string[] = []
   if (p.operatorId) ids.push(p.operatorId)
   if (p.targetId) ids.push(p.targetId)
   if (Array.isArray(p.targetIds)) ids.push(...p.targetIds)
@@ -169,9 +170,9 @@ function systemUserIds(vo: MessageVO): number[] {
 }
 
 function systemText(p: SystemPayload): string {
-  const op = userName(p.operatorId ?? 0)
+  const op = userName(p.operatorId ?? '')
   const targets = (p.targetIds ?? []).map(userName).join('、')
-  const target = userName(p.targetId ?? 0)
+  const target = userName(p.targetId ?? '')
   switch (p.action) {
     case 'group_created': return `${op} 创建了群聊`
     case 'members_added': return `${op} 邀请 ${targets} 加入群聊`
@@ -251,7 +252,7 @@ async function mapConversation(vo: ConversationVO, preview?: MessageVO): Promise
   const memberIds = vo.memberIds ?? []
   let name = vo.name ?? ''
   let avatarUrl = vo.avatarUrl
-  let peerId: number | undefined
+  let peerId: string | undefined
   if (vo.type === 1) {
     peerId = memberIds.find((id) => id !== me)
     if (peerId != null) {
@@ -287,7 +288,7 @@ export async function listConversations(): Promise<Conversation[]> {
   const peerIds = vos
     .filter((v) => v.type === 1)
     .map((v) => (v.memberIds ?? []).find((id) => id !== me))
-    .filter((id): id is number => id != null)
+    .filter((id): id is string => id != null)
   await resolveUsers(peerIds)
   // 拉每个会话的最后一条消息作为预览（后端会话 VO 不含消息正文）
   const previews = await Promise.all(
@@ -303,7 +304,7 @@ export async function listConversations(): Promise<Conversation[]> {
   return Promise.all(vos.map((v, i) => mapConversation(v, previews[i])))
 }
 
-export async function getConversation(id: number): Promise<Conversation> {
+export async function getConversation(id: string): Promise<Conversation> {
   if (USE_MOCK) {
     const c = (mockConversations as unknown as Conversation[]).find((x) => x.id === id)
     return delay(c ?? ({ id, type: 1, name: `会话 #${id}`, lastMessage: '', lastMessageAt: '', unread: 0 } as Conversation))
@@ -317,8 +318,8 @@ export async function getConversation(id: number): Promise<Conversation> {
   return mapConversation(vo)
 }
 
-export function getOrCreateDirect(peerUserId: number): Promise<Conversation> {
-  if (USE_MOCK) return delay({ id: peerUserId, type: 1, name: '新会话', lastMessage: '', lastMessageAt: '', unread: 0 } as Conversation)
+export function getOrCreateDirect(peerUserId: string): Promise<Conversation> {
+  if (USE_MOCK) return delay({ id: `conv-direct-${peerUserId}`, type: 1, name: '新会话', lastMessage: '', lastMessageAt: '', unread: 0 } as Conversation)
   return (async () => {
     const vo = await http.post<unknown, ConversationVO>('/im/conversations/direct', { peerUserId })
     await resolveUsers([peerUserId])
@@ -326,21 +327,22 @@ export function getOrCreateDirect(peerUserId: number): Promise<Conversation> {
   })()
 }
 
-export async function listMessages(conversationId: number): Promise<Message[]> {
+export async function listMessages(conversationId: string): Promise<Message[]> {
   if (USE_MOCK) return delay((mockMessages[conversationId] ?? []) as unknown as Message[])
   const vos = await http.get<unknown, MessageVO[]>('/im/messages', {
     params: { conversationId, limit: 50 }
   })
   await resolveUsers(vos.flatMap((m) => [m.senderId, ...systemUserIds(m)]))
-  return vos.map(mapMessage).sort((a, b) => a.id - b.id)
+  // id 为不透明 public_id，不做数值大小比较；按创建时间排序保证时序。
+  return vos.map(mapMessage).sort((a, b) => a.createdAtMs - b.createdAtMs)
 }
 
-export async function sendMessage(conversationId: number, content: string): Promise<Message> {
+export async function sendMessage(conversationId: string, content: string): Promise<Message> {
   if (USE_MOCK) {
     const msg = {
-      id: Date.now(),
+      id: `msg-local-${Date.now()}`,
       conversationId,
-      senderId: 0,
+      senderId: myId(),
       senderName: '我',
       contentType: 1,
       content,
@@ -412,13 +414,13 @@ export function uploadToStorage(
 }
 
 /** 发送文件消息：image/* → contentType 2，其余 → 3。 */
-export async function sendFileMessage(conversationId: number, meta: FileMessageMeta): Promise<Message> {
+export async function sendFileMessage(conversationId: string, meta: FileMessageMeta): Promise<Message> {
   const contentType = meta.mediaType.startsWith('image/') ? 2 : 3
   if (USE_MOCK) {
     const msg = {
-      id: Date.now(),
+      id: `msg-local-${Date.now()}`,
       conversationId,
-      senderId: 0,
+      senderId: myId(),
       senderName: '我',
       contentType,
       content: meta.fileName,
@@ -445,28 +447,35 @@ export async function sendFileMessage(conversationId: number, meta: FileMessageM
   return mapMessage(vo)
 }
 
-export function markRead(conversationId: number, lastReadMsgId: number) {
+// 在线状态初始快照：返回「当前在线的好友 userId 列表」。
+// WS presence 帧只在跳变时推送，进页面时需先拉一次快照，否则已在线的好友会一直显示离线。
+export function listOnlineFriends(): Promise<string[]> {
+  if (USE_MOCK) return delay([] as string[])
+  return http.get<unknown, string[]>('/im/presence/online')
+}
+
+export function markRead(conversationId: string, lastReadMsgId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, void>(`/im/conversations/${conversationId}/read`, { lastReadMsgId })
 }
 
-export function recallMessage(messageId: number) {
+export function recallMessage(messageId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, void>(`/im/messages/${messageId}/recall`)
 }
 
 // 群聊已读状态：totalRecipients/readCount 均不含发送者本人
 export interface ReadStatus {
-  messageId: number
-  conversationId: number
+  messageId: string
+  conversationId: string
   totalRecipients: number
   readCount: number
-  readerUserIds: number[]
+  readerUserIds: string[] // user public_id 列表
 }
 
-export function getReadStatus(messageId: number): Promise<ReadStatus> {
+export function getReadStatus(messageId: string): Promise<ReadStatus> {
   if (USE_MOCK) {
-    return delay({ messageId, conversationId: 0, totalRecipients: 0, readCount: 0, readerUserIds: [] })
+    return delay({ messageId, conversationId: '', totalRecipients: 0, readCount: 0, readerUserIds: [] })
   }
   return http.get<unknown, ReadStatus>(`/im/messages/${messageId}/read-status`)
 }
@@ -480,7 +489,7 @@ export async function decodeIncoming(raw: unknown): Promise<Message> {
 }
 
 // ───── 群聊管理 ─────
-export async function listMembers(conversationId: number): Promise<Member[]> {
+export async function listMembers(conversationId: string): Promise<Member[]> {
   if (USE_MOCK) return delay([] as Member[])
   const vos = await http.get<unknown, MemberVO[]>(`/im/conversations/${conversationId}/members`)
   return vos
@@ -495,41 +504,41 @@ export async function listMembers(conversationId: number): Promise<Member[]> {
     .sort((a, b) => b.role - a.role)
 }
 
-export async function createGroup(name: string, memberIds: number[], avatarUrl?: string): Promise<Conversation> {
+export async function createGroup(name: string, memberIds: string[], avatarUrl?: string): Promise<Conversation> {
   if (USE_MOCK) {
-    return delay({ id: Date.now(), type: 2, name, lastMessage: '', lastMessageAt: '', unread: 0, members: memberIds.length } as Conversation)
+    return delay({ id: `conv-group-${Date.now()}`, type: 2, name, lastMessage: '', lastMessageAt: '', unread: 0, members: memberIds.length } as Conversation)
   }
   const vo = await http.post<unknown, ConversationVO>('/im/conversations/group', { name, memberIds, avatarUrl })
   await resolveUsers(vo.memberIds ?? [])
   return mapConversation(vo)
 }
 
-export function updateGroup(conversationId: number, body: { name?: string; avatarUrl?: string }) {
+export function updateGroup(conversationId: string, body: { name?: string; avatarUrl?: string }) {
   if (USE_MOCK) return delay(undefined)
   return http.put<unknown, void>(`/im/conversations/${conversationId}`, body)
 }
 
-export function addMembers(conversationId: number, memberIds: number[]) {
+export function addMembers(conversationId: string, memberIds: string[]) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, void>(`/im/conversations/${conversationId}/members`, { memberIds })
 }
 
-export function removeMember(conversationId: number, targetUserId: number) {
+export function removeMember(conversationId: string, targetUserId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.delete<unknown, void>(`/im/conversations/${conversationId}/members/${targetUserId}`)
 }
 
-export function setMemberRole(conversationId: number, targetUserId: number, role: number) {
+export function setMemberRole(conversationId: string, targetUserId: string, role: number) {
   if (USE_MOCK) return delay(undefined)
   return http.put<unknown, void>(`/im/conversations/${conversationId}/members/${targetUserId}/role`, { role })
 }
 
-export function leaveGroup(conversationId: number) {
+export function leaveGroup(conversationId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, void>(`/im/conversations/${conversationId}/leave`)
 }
 
-export function transferOwner(conversationId: number, newOwnerId: number) {
+export function transferOwner(conversationId: string, newOwnerId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, void>(`/im/conversations/${conversationId}/owner`, { newOwnerId })
 }

@@ -24,13 +24,14 @@ class RocketMqPresenceEventConsumerTest {
     void onMessage_pushesPresenceToLocalFriends() {
         PresenceEvent event = PresenceEvent.builder()
                 .userId(7L)
+                .userPublicId("u7")
                 .online(true)
                 .friendUserIds(List.of(1L, 2L))
                 .build();
 
         consumer.onMessage(event);
 
-        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq(7L), eq(true));
+        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq("u7"), eq(true));
     }
 
     @Test

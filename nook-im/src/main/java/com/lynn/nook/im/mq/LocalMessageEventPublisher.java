@@ -30,7 +30,8 @@ public class LocalMessageEventPublisher implements MessageEventPublisher {
     @Override
     public void publishRecall(RecallEvent event) {
         if (event == null || event.getMessageId() == null) return;
-        int sent = pushService.pushRecall(event.getMemberUserIds(), event.getConversationId(), event.getMessageId());
+        int sent = pushService.pushRecall(event.getMemberUserIds(),
+                event.getConversationPublicId(), event.getMessagePublicId());
         if (log.isDebugEnabled()) {
             log.debug("local recall push: conv={}, msg={}, delivered={}",
                     event.getConversationId(), event.getMessageId(), sent);
@@ -40,7 +41,7 @@ public class LocalMessageEventPublisher implements MessageEventPublisher {
     @Override
     public void publishPresence(PresenceEvent event) {
         if (event == null || event.getUserId() == null) return;
-        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserId(), event.isOnline());
+        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserPublicId(), event.isOnline());
         if (log.isDebugEnabled()) {
             log.debug("local presence push: user={}, online={}, delivered={}",
                     event.getUserId(), event.isOnline(), sent);

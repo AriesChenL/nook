@@ -27,7 +27,7 @@ class MessagePushServiceTest {
 
     @Test
     void pushNewMessage_returnsZeroForEmptyMembers() {
-        int n = pushService.pushNewMessage(List.of(), MessageVO.builder().id(1L).build());
+        int n = pushService.pushNewMessage(List.of(), MessageVO.builder().id("m1").build());
         assertThat(n).isZero();
         verifyNoInteractions(sessionManager);
     }
@@ -36,20 +36,21 @@ class MessagePushServiceTest {
     void pushRecall_serializesRecallEnvelope() {
         when(sessionManager.sendToUsers(eq(List.of(1L, 2L)), anyString())).thenReturn(2);
 
-        int sent = pushService.pushRecall(List.of(1L, 2L), 42L, 99L);
+        // 帧内用 public_id；路由仍按数字成员 id
+        int sent = pushService.pushRecall(List.of(1L, 2L), "c42", "m99");
 
         assertThat(sent).isEqualTo(2);
         ArgumentCaptor<String> cap = ArgumentCaptor.forClass(String.class);
         verify(sessionManager).sendToUsers(eq(List.of(1L, 2L)), cap.capture());
         String payload = cap.getValue();
         assertThat(payload).contains("\"type\":\"recall\"");
-        assertThat(payload).contains("\"conversationId\":42");
-        assertThat(payload).contains("\"messageId\":99");
+        assertThat(payload).contains("\"conversationId\":\"c42\"");
+        assertThat(payload).contains("\"messageId\":\"m99\"");
     }
 
     @Test
     void pushRecall_returnsZeroForEmptyMembers() {
-        int n = pushService.pushRecall(List.of(), 1L, 1L);
+        int n = pushService.pushRecall(List.of(), "c1", "m1");
         assertThat(n).isZero();
         verifyNoInteractions(sessionManager);
     }
@@ -58,20 +59,20 @@ class MessagePushServiceTest {
     void pushPresence_serializesPresenceEnvelope() {
         when(sessionManager.sendToUsers(eq(List.of(1L, 2L)), anyString())).thenReturn(2);
 
-        int sent = pushService.pushPresence(List.of(1L, 2L), 7L, true);
+        int sent = pushService.pushPresence(List.of(1L, 2L), "u7", true);
 
         assertThat(sent).isEqualTo(2);
         ArgumentCaptor<String> cap = ArgumentCaptor.forClass(String.class);
         verify(sessionManager).sendToUsers(eq(List.of(1L, 2L)), cap.capture());
         String payload = cap.getValue();
         assertThat(payload).contains("\"type\":\"presence\"");
-        assertThat(payload).contains("\"userId\":7");
+        assertThat(payload).contains("\"userId\":\"u7\"");
         assertThat(payload).contains("\"online\":true");
     }
 
     @Test
     void pushPresence_returnsZeroForEmptyFriends() {
-        int n = pushService.pushPresence(List.of(), 7L, true);
+        int n = pushService.pushPresence(List.of(), "u7", true);
         assertThat(n).isZero();
         verifyNoInteractions(sessionManager);
     }
@@ -79,7 +80,7 @@ class MessagePushServiceTest {
     @Test
     void pushNewMessage_serializesEnvelopeAndDelegatesToManager() {
         MessageVO msg = MessageVO.builder()
-                .id(42L).conversationId(7L).senderId(100L)
+                .id("m42").conversationId("c7").senderId("u100")
                 .contentType((short) 1).content("hi")
                 .build();
         when(sessionManager.sendToUsers(eq(List.of(100L, 200L)), anyString())).thenReturn(3);
@@ -91,7 +92,7 @@ class MessagePushServiceTest {
         verify(sessionManager).sendToUsers(eq(List.of(100L, 200L)), cap.capture());
         String payload = cap.getValue();
         assertThat(payload).contains("\"type\":\"message\"");
-        assertThat(payload).contains("\"id\":42");
+        assertThat(payload).contains("\"id\":\"m42\"");
         assertThat(payload).contains("\"content\":\"hi\"");
     }
 }

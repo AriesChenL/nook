@@ -5,7 +5,7 @@ const TOKEN_KEY = 'nook.token'
 const USER_KEY = 'nook.user'
 
 export interface AuthUser {
-  userId: number
+  userId: string // user public_id 字符串
   username: string
   nickname?: string
 }

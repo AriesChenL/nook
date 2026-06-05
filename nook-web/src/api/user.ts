@@ -1,4 +1,5 @@
 import http from './http'
+import { useAuthStore } from '@/stores/auth'
 import {
   USE_MOCK,
   delay,
@@ -10,7 +11,7 @@ import {
 
 // ───── 后端 VO 形状 ─────
 export interface UserVO {
-  id: number
+  id: string // user public_id 字符串
   username: string
   nickname: string
   avatarUrl?: string
@@ -25,7 +26,7 @@ interface FriendVO {
 }
 
 interface FriendRequestVO {
-  id: number
+  id: string // friend_request public_id 字符串
   fromUser: UserVO
   toUser: UserVO
   message?: string
@@ -68,7 +69,15 @@ function toFriendRequest(vo: FriendRequestVO): FriendRequest {
 }
 
 // ───── 当前用户 ─────
-export function getMe() {
+export function getMe(): Promise<UserVO> {
+  if (USE_MOCK) {
+    const u = useAuthStore().user
+    return delay({
+      id: u?.userId ?? 'u-001',
+      username: u?.username ?? 'me',
+      nickname: u?.nickname ?? u?.username ?? '我'
+    } as UserVO)
+  }
   return http.get<unknown, UserVO>('/user/me')
 }
 
@@ -83,13 +92,14 @@ export function updateProfile(req: UpdateProfileRequest) {
   return http.put<unknown, UserVO>('/user/me', req)
 }
 
-export function getUser(id: number) {
+export function getUser(id: string) {
   return http.get<unknown, UserVO>(`/user/${id}`)
 }
 
 // 批量取公开资料（去重，后端限 200）。供 im 解析群成员/消息发送者名称，避免 N+1。
-export async function getUsersByIds(ids: number[]): Promise<UserVO[]> {
-  const uniq = [...new Set(ids)].filter((id) => id > 0)
+// id 为 user public_id 字符串，仅作不透明句柄，不做数值比较。
+export async function getUsersByIds(ids: string[]): Promise<UserVO[]> {
+  const uniq = [...new Set(ids)].filter((id) => !!id)
   if (!uniq.length) return []
   if (USE_MOCK) {
     return delay(
@@ -98,7 +108,8 @@ export async function getUsersByIds(ids: number[]): Promise<UserVO[]> {
         .map((f) => ({ id: f.userId, username: f.username, nickname: f.nickname, avatarUrl: f.avatarUrl }))
     )
   }
-  return http.get<unknown, UserVO[]>('/user/batch', { params: { ids: uniq.join(',') } })
+  // 前端只有 public_id，走 /profiles（/batch 是给 nook-im 的数字入参端点）
+  return http.get<unknown, UserVO[]>('/user/profiles', { params: { publicIds: uniq.join(',') } })
 }
 
 // ───── 好友 ─────
@@ -123,12 +134,12 @@ export async function searchUsers(keyword: string): Promise<Friend[]> {
   return vos.map(toFriendFromUser)
 }
 
-export function sendFriendRequest(toUserId: number, message?: string) {
+export function sendFriendRequest(toUserId: string, message?: string) {
   if (USE_MOCK) return delay(undefined)
   return http.post<unknown, FriendRequestVO>('/user/friends/requests', { toUserId, message })
 }
 
-export function acceptFriendRequest(id: number) {
+export function acceptFriendRequest(id: string) {
   if (USE_MOCK) {
     const req = mockFriendRequests.find((r) => r.id === id)
     if (req) req.status = 1
@@ -137,7 +148,7 @@ export function acceptFriendRequest(id: number) {
   return http.post<unknown, void>(`/user/friends/requests/${id}/accept`)
 }
 
-export function rejectFriendRequest(id: number) {
+export function rejectFriendRequest(id: string) {
   if (USE_MOCK) {
     const req = mockFriendRequests.find((r) => r.id === id)
     if (req) req.status = 2
@@ -146,12 +157,12 @@ export function rejectFriendRequest(id: number) {
   return http.post<unknown, void>(`/user/friends/requests/${id}/reject`)
 }
 
-export function removeFriend(friendUserId: number) {
+export function removeFriend(friendUserId: string) {
   if (USE_MOCK) return delay(undefined)
   return http.delete<unknown, void>(`/user/friends/${friendUserId}`)
 }
 
-export function updateFriendRemark(friendUserId: number, remark: string) {
+export function updateFriendRemark(friendUserId: string, remark: string) {
   if (USE_MOCK) return delay(undefined)
   return http.put<unknown, void>(`/user/friends/${friendUserId}/remark`, { remark })
 }

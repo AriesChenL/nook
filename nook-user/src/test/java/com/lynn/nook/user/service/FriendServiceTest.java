@@ -19,7 +19,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 class FriendServiceTest {
@@ -27,6 +26,7 @@ class FriendServiceTest {
     private FriendRequestMapper requestMapper;
     private FriendshipMapper friendshipMapper;
     private UserAccountMapper userMapper;
+    private UserService userService;
     private FriendService friendService;
 
     @BeforeEach
@@ -34,12 +34,13 @@ class FriendServiceTest {
         requestMapper = mock(FriendRequestMapper.class);
         friendshipMapper = mock(FriendshipMapper.class);
         userMapper = mock(UserAccountMapper.class);
-        friendService = new FriendService(requestMapper, friendshipMapper, userMapper);
+        userService = mock(UserService.class);
+        friendService = new FriendService(requestMapper, friendshipMapper, userMapper, userService);
     }
 
     private UserAccount user(Long id) {
         UserAccount u = new UserAccount();
-        u.setId(id); u.setUsername("u" + id); u.setStatus((short) 1);
+        u.setId(id); u.setPublicId("pub" + id); u.setUsername("u" + id); u.setStatus((short) 1);
         return u;
     }
 
@@ -60,8 +61,9 @@ class FriendServiceTest {
 
     @Test
     void sendRequest_rejectsSelf() {
+        when(userService.resolveId("pub1")).thenReturn(1L);
         CreateFriendRequest req = new CreateFriendRequest();
-        req.setToUserId(1L);
+        req.setToUserId("pub1");
         assertThatThrownBy(() -> friendService.sendRequest(1L, req))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_CANNOT_ADD_SELF.getCode());
@@ -69,9 +71,10 @@ class FriendServiceTest {
 
     @Test
     void sendRequest_rejectsWhenTargetMissing() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         when(userMapper.selectOneById(2L)).thenReturn(null);
         CreateFriendRequest req = new CreateFriendRequest();
-        req.setToUserId(2L);
+        req.setToUserId("pub2");
         assertThatThrownBy(() -> friendService.sendRequest(1L, req))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.USER_NOT_FOUND.getCode());
@@ -79,10 +82,11 @@ class FriendServiceTest {
 
     @Test
     void sendRequest_rejectsWhenAlreadyFriends() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         when(userMapper.selectOneById(2L)).thenReturn(user(2L));
         when(friendshipMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(1L);
         CreateFriendRequest req = new CreateFriendRequest();
-        req.setToUserId(2L);
+        req.setToUserId("pub2");
         assertThatThrownBy(() -> friendService.sendRequest(1L, req))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_ALREADY.getCode());
@@ -90,11 +94,12 @@ class FriendServiceTest {
 
     @Test
     void sendRequest_rejectsWhenPendingExists() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         when(userMapper.selectOneById(2L)).thenReturn(user(2L));
         when(friendshipMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
         when(requestMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(1L);
         CreateFriendRequest req = new CreateFriendRequest();
-        req.setToUserId(2L);
+        req.setToUserId("pub2");
         assertThatThrownBy(() -> friendService.sendRequest(1L, req))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_REQUEST_EXISTS.getCode());
@@ -102,6 +107,7 @@ class FriendServiceTest {
 
     @Test
     void sendRequest_persistsPendingAndReturnsVO() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         when(userMapper.selectOneById(2L)).thenReturn(user(2L));
         when(friendshipMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
         when(requestMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
@@ -110,7 +116,7 @@ class FriendServiceTest {
                 .when(requestMapper).insert(any(FriendRequest.class));
 
         CreateFriendRequest req = new CreateFriendRequest();
-        req.setToUserId(2L);
+        req.setToUserId("pub2");
         req.setMessage("hi");
 
         var vo = friendService.sendRequest(1L, req);
@@ -121,7 +127,9 @@ class FriendServiceTest {
         assertThat(saved.getFromUserId()).isEqualTo(1L);
         assertThat(saved.getToUserId()).isEqualTo(2L);
         assertThat(saved.getStatus()).isEqualTo(FriendRequest.STATUS_PENDING);
-        assertThat(vo.getId()).isEqualTo(99L);
+        assertThat(saved.getPublicId()).isNotBlank();
+        // 对外 id 输出申请 public_id（脱敏）
+        assertThat(vo.getId()).isEqualTo(saved.getPublicId());
         assertThat(vo.getMessage()).isEqualTo("hi");
     }
 
@@ -129,16 +137,16 @@ class FriendServiceTest {
 
     @Test
     void accept_rejectsWhenRequestMissingOrNotPending() {
-        when(requestMapper.selectOneById(anyLong())).thenReturn(null);
-        assertThatThrownBy(() -> friendService.accept(1L, 9L))
+        when(requestMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(null);
+        assertThatThrownBy(() -> friendService.accept(1L, "rpub"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_REQUEST_NOT_FOUND.getCode());
 
         FriendRequest done = new FriendRequest();
-        done.setId(9L); done.setToUserId(1L);
+        done.setId(9L); done.setPublicId("rpub"); done.setToUserId(1L);
         done.setStatus(FriendRequest.STATUS_ACCEPTED);
-        when(requestMapper.selectOneById(9L)).thenReturn(done);
-        assertThatThrownBy(() -> friendService.accept(1L, 9L))
+        when(requestMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(done);
+        assertThatThrownBy(() -> friendService.accept(1L, "rpub"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_REQUEST_NOT_FOUND.getCode());
     }
@@ -146,11 +154,11 @@ class FriendServiceTest {
     @Test
     void accept_rejectsWhenCallerIsNotReceiver() {
         FriendRequest r = new FriendRequest();
-        r.setId(9L); r.setFromUserId(2L); r.setToUserId(3L);
+        r.setId(9L); r.setPublicId("rpub"); r.setFromUserId(2L); r.setToUserId(3L);
         r.setStatus(FriendRequest.STATUS_PENDING);
-        when(requestMapper.selectOneById(9L)).thenReturn(r);
+        when(requestMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(r);
 
-        assertThatThrownBy(() -> friendService.accept(99L, 9L))
+        assertThatThrownBy(() -> friendService.accept(99L, "rpub"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_REQUEST_FORBIDDEN.getCode());
     }
@@ -158,12 +166,12 @@ class FriendServiceTest {
     @Test
     void accept_marksRequestAndInsertsDualFriendship() {
         FriendRequest r = new FriendRequest();
-        r.setId(9L); r.setFromUserId(2L); r.setToUserId(3L);
+        r.setId(9L); r.setPublicId("rpub"); r.setFromUserId(2L); r.setToUserId(3L);
         r.setStatus(FriendRequest.STATUS_PENDING);
-        when(requestMapper.selectOneById(9L)).thenReturn(r);
+        when(requestMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(r);
         when(friendshipMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
 
-        friendService.accept(3L, 9L);
+        friendService.accept(3L, "rpub");
 
         verify(requestMapper).update(argThat(req ->
                 req.getStatus().equals(FriendRequest.STATUS_ACCEPTED)));
@@ -174,11 +182,11 @@ class FriendServiceTest {
     @Test
     void reject_marksRejected_doesNotCreateFriendship() {
         FriendRequest r = new FriendRequest();
-        r.setId(9L); r.setFromUserId(2L); r.setToUserId(3L);
+        r.setId(9L); r.setPublicId("rpub"); r.setFromUserId(2L); r.setToUserId(3L);
         r.setStatus(FriendRequest.STATUS_PENDING);
-        when(requestMapper.selectOneById(9L)).thenReturn(r);
+        when(requestMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(r);
 
-        friendService.reject(3L, 9L);
+        friendService.reject(3L, "rpub");
 
         verify(requestMapper).update(argThat(req ->
                 req.getStatus().equals(FriendRequest.STATUS_REJECTED)));
@@ -189,31 +197,35 @@ class FriendServiceTest {
 
     @Test
     void removeFriend_ignoresSelf() {
-        friendService.removeFriend(1L, 1L);
+        when(userService.resolveId("pub1")).thenReturn(1L);
+        friendService.removeFriend(1L, "pub1");
         verifyNoInteractions(friendshipMapper);
     }
 
     @Test
     void removeFriend_deletesBothDirections() {
-        friendService.removeFriend(1L, 2L);
+        when(userService.resolveId("pub2")).thenReturn(2L);
+        friendService.removeFriend(1L, "pub2");
         verify(friendshipMapper).deleteByQuery(any(QueryWrapper.class));
     }
 
     @Test
     void updateRemark_rejectsWhenNotFriend() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         when(friendshipMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(null);
-        assertThatThrownBy(() -> friendService.updateRemark(1L, 2L, "buddy"))
+        assertThatThrownBy(() -> friendService.updateRemark(1L, "pub2", "buddy"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.FRIEND_NOT_FOUND.getCode());
     }
 
     @Test
     void updateRemark_persistsRemark() {
+        when(userService.resolveId("pub2")).thenReturn(2L);
         Friendship f = new Friendship();
         f.setId(1L); f.setOwnerId(1L); f.setFriendId(2L);
         when(friendshipMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(f);
 
-        friendService.updateRemark(1L, 2L, "buddy");
+        friendService.updateRemark(1L, "pub2", "buddy");
 
         ArgumentCaptor<Friendship> cap = ArgumentCaptor.forClass(Friendship.class);
         verify(friendshipMapper).update(cap.capture());

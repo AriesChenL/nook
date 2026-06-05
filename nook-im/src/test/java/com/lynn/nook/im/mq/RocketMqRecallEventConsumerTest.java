@@ -25,12 +25,14 @@ class RocketMqRecallEventConsumerTest {
         RecallEvent event = RecallEvent.builder()
                 .conversationId(7L)
                 .messageId(42L)
+                .conversationPublicId("c7")
+                .messagePublicId("m42")
                 .memberUserIds(List.of(100L, 200L))
                 .build();
 
         consumer.onMessage(event);
 
-        verify(pushService).pushRecall(eq(List.of(100L, 200L)), eq(7L), eq(42L));
+        verify(pushService).pushRecall(eq(List.of(100L, 200L)), eq("c7"), eq("m42"));
     }
 
     @Test

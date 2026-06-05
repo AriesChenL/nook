@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/composables/useConfirm'
 import { useAuthStore } from '@/stores/auth'
 import { usePresenceStore } from '@/stores/presence'
+import { useFriendStore } from '@/stores/friends'
 import { logout } from '@/api/auth'
+import { listOnlineFriends } from '@/api/im'
 import { chatSocket } from '@/api/ws'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
@@ -12,6 +15,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const presence = usePresenceStore()
+const friends = useFriendStore()
 
 interface NavItem {
   key: string
@@ -24,7 +28,7 @@ interface NavItem {
 
 const nav: NavItem[] = [
   { key: 'chat',     label: '消息',    to: '/chat',     match: (p) => p.startsWith('/chat'),     icon: 'chat' },
-  { key: 'contacts', label: '联系人',  to: '/contacts', match: (p) => p.startsWith('/contacts'), icon: 'contacts' },
+  { key: 'contacts', label: '联系人',  to: '/contacts', match: (p) => p.startsWith('/contacts'), icon: 'contacts', badge: () => friends.pendingCount },
   { key: 'ai',       label: 'AI 助手', to: '/ai',       match: (p) => p.startsWith('/ai'),       icon: 'ai' },
   { key: 'profile',  label: '我的',    to: '/profile',  match: (p) => p.startsWith('/profile'),  icon: 'profile' }
 ]
@@ -32,27 +36,53 @@ const nav: NavItem[] = [
 const currentKey = computed(() => nav.find((n) => n.match(route.path))?.key ?? 'chat')
 
 let offPresence: (() => void) | null = null
+let offReady: (() => void) | null = null
+let friendPollTimer: ReturnType<typeof setInterval> | null = null
+const FRIEND_POLL_MS = 15000
+
+// 拉一次在线快照：WS 只推状态跳变，不告知「此刻谁在线」，
+// 缺这一步会导致进页面/重连后，本已在线的好友一直显示离线。
+async function refreshPresenceSnapshot() {
+  try {
+    presence.setSnapshot(await listOnlineFriends())
+  } catch {
+    /* 快照失败不影响后续 WS 增量更新 */
+  }
+}
 
 onMounted(() => {
-  if (auth.token) chatSocket.connect(auth.token)
+  // 先订阅，确保 WS 早期事件不丢；快照与当前集合取并集，不会覆盖刚到的事件。
   offPresence = chatSocket.on('presence', (frame) => {
-    const d = frame.data as { userId?: number; online?: boolean } | undefined
+    const d = frame.data as { userId?: string; online?: boolean } | undefined
     if (d?.userId != null) presence.setOnline(d.userId, !!d.online)
   })
+  // 每次（重）连成功后端都会下发 ready 帧，借此在重连后重新对齐在线快照。
+  offReady = chatSocket.on('ready', () => {
+    refreshPresenceSnapshot()
+  })
+
+  if (auth.token) {
+    chatSocket.connect(auth.token)
+    // 兜底：若 WS 因故连不上，仍能通过 HTTP 拿到一次初始快照。
+    refreshPresenceSnapshot()
+  }
+
+  // 全局轮询待处理好友申请数（侧栏「联系人」角标），B 在任意页面都能感知到新申请
+  friends.refreshPending()
+  friendPollTimer = setInterval(() => {
+    if (!document.hidden && auth.token) friends.refreshPending()
+  }, FRIEND_POLL_MS)
 })
 
-onUnmounted(() => offPresence?.())
+onUnmounted(() => {
+  offPresence?.()
+  offReady?.()
+  if (friendPollTimer) clearInterval(friendPollTimer)
+})
 
 async function onLogout() {
-  try {
-    await ElMessageBox.confirm('确定退出登录吗？', '提示', {
-      type: 'warning',
-      confirmButtonText: '退出',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({ message: '确定退出登录吗？', confirmText: '退出', danger: true })
+  if (!ok) return
   try {
     await logout()
   } catch {
@@ -76,10 +106,11 @@ async function onLogout() {
 
       <nav class="nav">
         <router-link
-          v-for="item in nav"
+          v-for="(item, i) in nav"
           :key="item.key"
           :to="item.to"
           :class="['nav-item', { active: currentKey === item.key }]"
+          :style="{ animationDelay: 80 + i * 60 + 'ms' }"
         >
           <span class="nav-icon" aria-hidden="true">
             <!-- chat -->
@@ -159,26 +190,46 @@ html.dark .app {
   padding: 20px 14px;
   border-right: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  z-index: 1;
+}
+/* 顶部高光，给玻璃面一道边缘亮线 */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+}
+html.dark .sidebar::before {
+  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.3), transparent);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 14px;
+  padding: 6px 8px 16px;
   cursor: pointer;
+  animation: nook-rise var(--dur-slow) var(--ease-out) both;
 }
 .brand img {
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   box-shadow: 0 6px 14px -4px rgba(15, 118, 110, 0.4);
+  transition: transform var(--dur) var(--ease-spring);
+}
+.brand:hover img {
+  transform: rotate(-8deg) scale(1.06);
 }
 .brand-name {
   font-family: var(--nook-font-display);
   font-weight: 700;
-  font-size: 18px;
-  background: linear-gradient(135deg, #0f766e, #fb923c);
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  background: var(--nook-gradient-brand);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -195,22 +246,39 @@ html.dark .app {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 11px 13px;
+  border-radius: var(--r-sm);
   font-size: 14px;
   font-weight: 500;
   color: var(--nook-text-muted);
   text-decoration: none;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
   position: relative;
+  animation: nook-rise var(--dur-slow) var(--ease-out) both;
 }
 .nav-item:hover {
   background: rgba(20, 184, 166, 0.08);
   color: var(--nook-text);
+  transform: translateX(2px);
 }
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(251, 146, 60, 0.12));
+  background: var(--nook-gradient-wash);
   color: var(--nook-primary-deep);
+  box-shadow: inset 0 0 0 1px var(--nook-surface-border), 0 8px 22px -14px rgba(20, 184, 166, 0.7);
+}
+/* 选中态左侧光条 */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 22px;
+  border-radius: 0 4px 4px 0;
+  background: var(--nook-gradient-brand);
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.7);
 }
 html.dark .nav-item.active {
   color: var(--nook-primary-soft);
@@ -243,9 +311,12 @@ html.dark .nav-item.active {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px;
-  border-radius: 14px;
-  background: rgba(20, 184, 166, 0.06);
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--nook-surface-sunken);
+  border: 1px solid var(--nook-hairline);
+  animation: nook-rise var(--dur-slow) var(--ease-out) both;
+  animation-delay: 320ms;
 }
 .user-chip {
   display: flex;
@@ -258,12 +329,13 @@ html.dark .nav-item.active {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  border-radius: var(--r-sm);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 700;
   font-size: 15px;
+  box-shadow: var(--shadow-sm);
 }
 .who {
   display: flex;
@@ -297,16 +369,19 @@ html.dark .nav-item.active {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
   color: var(--nook-text);
   cursor: pointer;
-  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .icon-btn:hover {
   border-color: #ef4444;
   color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  transform: translateY(-1px);
 }
 
 .content {
@@ -317,13 +392,19 @@ html.dark .nav-item.active {
   flex-direction: column;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 180ms ease;
+.fade-enter-active {
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
 }
-.fade-enter-from,
+.fade-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-6px);
 }
 
 @media (max-width: 768px) {

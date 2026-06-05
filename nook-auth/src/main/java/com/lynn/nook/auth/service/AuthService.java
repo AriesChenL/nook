@@ -41,6 +41,7 @@ public class AuthService {
         }
 
         User u = new User();
+        u.setPublicId(java.util.UUID.randomUUID().toString());
         u.setUsername(req.getUsername());
         u.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         u.setNickname(req.getNickname() != null ? req.getNickname() : req.getUsername());
@@ -80,8 +81,9 @@ public class AuthService {
         redis.opsForValue().set(CacheKeys.token(token), String.valueOf(u.getId()), ttl);
         registerToken(u.getId(), token, ttl);
 
+        // 对外只暴露 public_id（脱敏）；JWT 主体内部仍用数字 id。
         return new LoginResponse(
-                u.getId(), u.getUsername(), u.getNickname(), token, expireMillis / 1000
+                u.getPublicId(), u.getUsername(), u.getNickname(), token, expireMillis / 1000
         );
     }
 
@@ -115,7 +117,7 @@ public class AuthService {
         User u = userMapper.selectOneById(userId);
         if (u == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
         return MeResponse.builder()
-                .id(u.getId())
+                .id(u.getPublicId())
                 .username(u.getUsername())
                 .nickname(u.getNickname())
                 .avatarUrl(u.getAvatarUrl())

@@ -130,15 +130,33 @@ html.dark .grid {
 }
 
 .auth-card {
+  position: relative;
   width: min(420px, 100%);
-  padding: 36px 32px 28px;
-  border-radius: 28px;
-  background: var(--nook-surface);
+  padding: 38px 32px 28px;
+  border-radius: var(--r-xl);
+  background: var(--nook-surface-raised);
   border: 1px solid var(--nook-surface-border);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  box-shadow: var(--nook-shadow);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: var(--shadow-lg);
   color: var(--nook-text);
+  overflow: hidden;
+  animation: card-in var(--dur-slow) var(--ease-spring) both;
+}
+/* 卡片顶部一道高光，强化玻璃边缘 */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+}
+html.dark .auth-card::before {
+  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.4), transparent);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (max-width: 480px) {
@@ -169,8 +187,8 @@ html.dark .grid {
 .brand-name {
   font-family: var(--nook-font-display);
   font-weight: 600;
-  letter-spacing: 0.02em;
-  background: linear-gradient(135deg, #0f766e, #fb923c);
+  letter-spacing: 0.01em;
+  background: var(--nook-gradient-brand);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -179,9 +197,10 @@ html.dark .grid {
 .auth-title {
   font-family: var(--nook-font-display);
   font-weight: 700;
-  font-size: 28px;
-  line-height: 1.2;
-  margin: 0 0 6px;
+  font-size: 31px;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
   color: var(--nook-text);
 }
 .auth-sub {

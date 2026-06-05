@@ -29,7 +29,7 @@ public class RocketMqPresenceEventConsumer implements RocketMQListener<PresenceE
     @Override
     public void onMessage(PresenceEvent event) {
         if (event == null || event.getUserId() == null) return;
-        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserId(), event.isOnline());
+        int sent = pushService.pushPresence(event.getFriendUserIds(), event.getUserPublicId(), event.isOnline());
         if (log.isDebugEnabled()) {
             log.debug("mq presence consumed: user={}, online={}, locallyDelivered={}",
                     event.getUserId(), event.isOnline(), sent);

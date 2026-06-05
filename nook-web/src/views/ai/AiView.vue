@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import NookModal from '@/components/NookModal.vue'
+import { confirm } from '@/composables/useConfirm'
 import {
   aiPresets,
   chat,
   createAgent,
-  createSession,
   deleteAgent,
   listAgents,
   listSessions,
@@ -13,6 +14,7 @@ import {
   type Agent,
   type ChatSession
 } from '@/api/ai'
+import MarkdownText from '@/components/MarkdownText.vue'
 
 interface ChatTurn {
   id: number
@@ -22,19 +24,21 @@ interface ChatTurn {
 
 // ───── 状态 ─────
 const agents = ref<Agent[]>([])
-const currentAgentId = ref<number | null>(null)
+const currentAgentId = ref<string | null>(null)
 const sessions = ref<ChatSession[]>([])
-const currentSessionId = ref<number | null>(null)
+const currentSessionId = ref<string | null>(null)
 // 会话 → 对话流（仅本次浏览器会话内存；后端记忆持久，历史接口为后续）
-const turnsBySession = reactive<Record<number, ChatTurn[]>>({})
+// key 为 session public_id 字符串，或新建会话前的临时桶 NEW_BUCKET。
+const turnsBySession = reactive<Record<string, ChatTurn[]>>({})
 
 const draft = ref('')
 const sending = ref(false)
+const composerEl = ref<HTMLTextAreaElement | null>(null)
 const loadingAgents = ref(false)
 const scroller = ref<HTMLDivElement | null>(null)
 
 // 新建会话前的临时桶 key（后端首次对话才分配真实 sessionId）
-const NEW_BUCKET = 0
+const NEW_BUCKET = '__new__'
 
 const currentAgent = computed(() => agents.value.find((a) => a.id === currentAgentId.value) ?? null)
 const bucketKey = computed(() => currentSessionId.value ?? NEW_BUCKET)
@@ -50,7 +54,7 @@ async function scrollBottom() {
 }
 
 // ───── 加载 ─────
-async function loadAgents(selectId?: number) {
+async function loadAgents(selectId?: string) {
   loadingAgents.value = true
   try {
     agents.value = await listAgents()
@@ -69,7 +73,7 @@ async function loadAgents(selectId?: number) {
   }
 }
 
-async function selectAgent(id: number) {
+async function selectAgent(id: string) {
   if (sending.value) return
   currentAgentId.value = id
   try {
@@ -79,23 +83,6 @@ async function selectAgent(id: number) {
     ElMessage.error(e?.message ?? '加载会话失败')
     sessions.value = []
     currentSessionId.value = null
-  }
-}
-
-function onSwitchSession(id: number) {
-  currentSessionId.value = id
-  scrollBottom()
-}
-
-async function newSession() {
-  if (!currentAgentId.value) return
-  try {
-    const s = await createSession(currentAgentId.value)
-    sessions.value.unshift(s)
-    currentSessionId.value = s.id
-    turnsBySession[s.id] = []
-  } catch (e: any) {
-    ElMessage.error(e?.message ?? '新建会话失败')
   }
 }
 
@@ -132,6 +119,9 @@ async function ask(prompt: string) {
   } finally {
     sending.value = false
     scrollBottom()
+    // 发送完成（textarea 因 disabled 失焦）后重新聚焦，方便连续输入
+    await nextTick()
+    composerEl.value?.focus()
   }
 }
 
@@ -146,20 +136,15 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-function clearCurrent() {
-  if (sending.value) return
-  turnsBySession[bucketKey.value] = []
-}
-
 // ───── Agent 增改删 ─────
 const dialogVisible = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
-const form = reactive({ id: 0, name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
+const form = reactive({ id: '', name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
 const saving = ref(false)
 
 function openCreate() {
   dialogMode.value = 'create'
-  Object.assign(form, { id: 0, name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
+  Object.assign(form, { id: '', name: '', persona: '', avatarUrl: '', modelName: 'deepseek-v4-flash' })
   dialogVisible.value = true
 }
 
@@ -211,15 +196,13 @@ async function saveAgent() {
 }
 
 async function removeAgent(a: Agent) {
-  try {
-    await ElMessageBox.confirm(`删除 Agent「${a.name}」？其对话线程会一并删除，但与其它 Agent 共享的长期记忆仍保留。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm({
+    title: '删除确认',
+    message: `删除 Agent「${a.name}」？其对话线程会一并删除，但与其它 Agent 共享的长期记忆仍保留。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!ok) return
   try {
     await deleteAgent(a.id)
     ElMessage.success('已删除')
@@ -295,20 +278,6 @@ onMounted(() => loadAgents())
               <p>{{ currentAgent.persona || '（未设定人格）' }} · {{ currentAgent.modelName }}</p>
             </div>
           </div>
-          <div class="head-ops">
-            <el-select
-              v-if="sessions.length"
-              :model-value="currentSessionId ?? undefined"
-              placeholder="选择会话"
-              size="small"
-              style="width: 160px"
-              @change="onSwitchSession"
-            >
-              <el-option v-for="s in sessions" :key="s.id" :label="s.title || `会话 #${s.id}`" :value="s.id" />
-            </el-select>
-            <button class="ghost-btn" title="新建会话" @click="newSession">＋ 会话</button>
-            <button class="ghost-btn" :disabled="sending || !turns.length" @click="clearCurrent">清空</button>
-          </div>
         </header>
 
         <div ref="scroller" class="chat-body">
@@ -327,7 +296,10 @@ onMounted(() => loadAgents())
             <div v-for="t in turns" :key="t.id" :class="['turn', t.role]">
               <span class="role-tag">{{ t.role === 'user' ? '我' : currentAgent.name }}</span>
               <div class="bubble">
-                <pre v-if="t.content">{{ t.content }}</pre>
+                <template v-if="t.content">
+                  <MarkdownText v-if="t.role === 'assistant'" :content="t.content" />
+                  <pre v-else class="user-text">{{ t.content }}</pre>
+                </template>
                 <span v-else class="typing"><i /><i /><i /></span>
               </div>
             </div>
@@ -335,54 +307,61 @@ onMounted(() => loadAgents())
         </div>
 
         <footer class="composer">
-          <textarea
-            v-model="draft"
-            rows="1"
-            placeholder="说点什么，Enter 发送 · Shift+Enter 换行"
-            :disabled="sending"
-            @keydown="onKeydown"
-          />
-          <button class="send-btn" :disabled="!draft.trim() || sending" @click="onSubmit">
-            <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-            <span v-else class="typing"><i /><i /><i /></span>
-            <span>{{ sending ? '思考中…' : '发送' }}</span>
-          </button>
+          <div class="composer-inner">
+            <textarea
+              ref="composerEl"
+              v-model="draft"
+              rows="1"
+              placeholder="说点什么，Enter 发送 · Shift+Enter 换行"
+              :disabled="sending"
+              @keydown="onKeydown"
+            />
+            <button class="send-btn" :disabled="!draft.trim() || sending" @click="onSubmit">
+              <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+              <span v-else class="typing"><i /><i /><i /></span>
+              <span>{{ sending ? '思考中…' : '发送' }}</span>
+            </button>
+          </div>
         </footer>
       </template>
     </section>
 
     <!-- 新建 / 编辑 Agent -->
-    <el-dialog
+    <NookModal
       v-model="dialogVisible"
       :title="dialogMode === 'create' ? '新建 Agent' : '编辑 Agent'"
-      width="460px"
+      :width="460"
     >
-      <el-form label-position="top">
-        <el-form-item label="名称" required>
-          <el-input v-model="form.name" maxlength="64" placeholder="例如：小柚" />
-        </el-form-item>
-        <el-form-item label="人格设定（注入系统提示，决定语气性格）">
-          <el-input
-            v-model="form.persona"
-            type="textarea"
-            :rows="3"
-            placeholder="例如：你是一个元气满满、爱用颜文字的桌面助手"
-          />
-        </el-form-item>
-        <el-form-item label="头像 URL（可选）">
-          <el-input v-model="form.avatarUrl" maxlength="512" placeholder="https://..." />
-        </el-form-item>
-        <el-form-item v-if="dialogMode === 'create'" label="模型">
-          <el-input v-model="form.modelName" maxlength="64" placeholder="deepseek-v4-flash" />
-        </el-form-item>
-      </el-form>
+      <div class="nk-field">
+        <label class="nk-label">名称<span class="req">*</span></label>
+        <input v-model="form.name" class="nk-input" maxlength="64" placeholder="例如：小柚" />
+      </div>
+      <div class="nk-field">
+        <label class="nk-label">人格设定</label>
+        <textarea
+          v-model="form.persona"
+          class="nk-textarea"
+          rows="3"
+          placeholder="例如：你是一个元气满满、爱用颜文字的桌面助手"
+        />
+        <p class="nk-hint">注入系统提示，决定 Agent 的语气与性格</p>
+      </div>
+      <div class="nk-field">
+        <label class="nk-label">头像 URL（可选）</label>
+        <input v-model="form.avatarUrl" class="nk-input" maxlength="512" placeholder="https://..." />
+      </div>
+      <div v-if="dialogMode === 'create'" class="nk-field">
+        <label class="nk-label">模型</label>
+        <input v-model="form.modelName" class="nk-input" maxlength="64" placeholder="deepseek-v4-flash" />
+      </div>
+
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveAgent">
-          {{ dialogMode === 'create' ? '创建' : '保存' }}
-        </el-button>
+        <button class="nk-btn nk-btn--ghost" type="button" @click="dialogVisible = false">取消</button>
+        <button class="nk-btn nk-btn--primary" type="button" :disabled="saving" @click="saveAgent">
+          {{ saving ? '保存中…' : dialogMode === 'create' ? '创建' : '保存' }}
+        </button>
       </template>
-    </el-dialog>
+    </NookModal>
   </div>
 </template>
 
@@ -425,7 +404,7 @@ onMounted(() => loadAgents())
   height: 30px;
   border-radius: 9px;
   border: none;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   cursor: pointer;
   transition: filter 160ms ease;
@@ -472,7 +451,7 @@ onMounted(() => loadAgents())
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 700;
@@ -557,7 +536,7 @@ onMounted(() => loadAgents())
   padding: 0 22px;
   border-radius: 12px;
   border: none;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 600;
@@ -583,7 +562,7 @@ onMounted(() => loadAgents())
   width: 40px;
   height: 40px;
   border-radius: 11px;
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 700;
@@ -600,54 +579,88 @@ onMounted(() => loadAgents())
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.head-ops { display: flex; align-items: center; gap: 8px; }
-.ghost-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9px;
-  border: 1px solid var(--nook-surface-border);
-  background: transparent;
-  color: var(--nook-text);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease;
-}
-.ghost-btn:hover:not(:disabled) { border-color: var(--nook-primary); color: var(--nook-primary-deep); }
-.ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.chat-body { flex: 1; overflow-y: auto; padding: 20px 24px 28px; min-height: 0; }
+.chat-body { flex: 1; overflow-y: auto; padding: 24px 24px 28px; min-height: 0; display: flex; flex-direction: column; }
 .chat-body::-webkit-scrollbar { width: 6px; }
 .chat-body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
 
-.welcome { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 48px 16px 24px; text-align: center; }
-.hero img { border-radius: 14px; box-shadow: 0 16px 32px -14px rgba(15, 118, 110, 0.45); margin-bottom: 10px; }
-.hero h3 { margin: 0; font-family: var(--nook-font-display); font-size: 20px; font-weight: 700; color: var(--nook-text); }
-.hero p { margin: 6px 0 0; color: var(--nook-text-muted); font-size: 13px; }
-.presets { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 10px; }
+/* 空状态在可用高度内垂直居中，不再顶在上方 */
+.welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; min-height: 0; padding: 24px 16px; text-align: center; }
+.hero { position: relative; }
+/* logo 背后的柔光晕 */
+.hero::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  width: 160px;
+  height: 160px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.4), transparent 68%);
+  filter: blur(18px);
+  z-index: -1;
+  pointer-events: none;
+}
+.hero img { position: relative; border-radius: 16px; box-shadow: 0 18px 40px -16px rgba(15, 118, 110, 0.5); margin-bottom: 14px; }
+.hero h3 { margin: 0; font-family: var(--nook-font-display); font-size: 25px; font-weight: 700; letter-spacing: -0.02em; color: var(--nook-text); }
+.hero p { margin: 8px 0 0; color: var(--nook-text-muted); font-size: 13.5px; }
+.presets { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 12px; }
 @media (max-width: 640px) { .presets { grid-template-columns: 1fr; } }
 .preset {
-  padding: 13px 15px;
-  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 16px;
+  border-radius: var(--r-md);
   border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
+  background: var(--nook-surface-raised);
   color: var(--nook-text);
   font: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 160ms ease, transform 160ms ease;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  transition: border-color var(--dur) var(--ease-out), transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
 }
-.preset:hover { border-color: var(--nook-primary); transform: translateY(-1px); }
+/* 前导箭头，hover 时滑入 */
+.preset::before {
+  content: '→';
+  flex-shrink: 0;
+  color: var(--nook-primary);
+  font-weight: 700;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+.preset:hover {
+  border-color: var(--nook-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  background: var(--nook-gradient-wash);
+}
+.preset:hover::before { opacity: 1; transform: none; }
 
-.turns { display: flex; flex-direction: column; gap: 18px; max-width: 820px; margin: 0 auto; }
-.turn { display: flex; flex-direction: column; gap: 6px; }
+.turns { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 820px; margin: 0 auto; }
+.turn { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; animation: nook-rise var(--dur-slow) var(--ease-out) both; }
 .turn.user { align-items: flex-end; }
 .role-tag { font-family: var(--nook-font-display); font-size: 11.5px; letter-spacing: 0.04em; color: var(--nook-text-muted); padding: 0 4px; }
-.bubble { padding: 12px 16px; border-radius: 16px; max-width: 85%; border: 1px solid var(--nook-surface-border); background: var(--nook-surface); }
-.turn.user .bubble { background: linear-gradient(135deg, #14b8a6, #0f766e); border-color: transparent; color: #fff; }
+.bubble {
+  padding: 13px 17px;
+  border-radius: 18px 18px 18px 6px;
+  max-width: 85%;
+  border: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface-raised);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+}
+.turn.user .bubble {
+  border-radius: 18px 18px 6px 18px;
+  background: var(--nook-bubble-mine-bg);
+  border-color: var(--nook-bubble-mine-border);
+  color: var(--nook-bubble-mine-fg);
+  box-shadow: var(--nook-bubble-mine-shadow);
+}
 .bubble pre { margin: 0; font-family: var(--nook-font-sans); font-size: 14px; line-height: 1.6; color: inherit; white-space: pre-wrap; word-break: break-word; }
 
 .typing { display: inline-flex; gap: 4px; align-items: center; }
@@ -657,12 +670,18 @@ onMounted(() => loadAgents())
 @keyframes blink { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.6); } 40% { opacity: 1; transform: scale(1); } }
 
 .composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
   padding: 12px 24px 18px;
   border-top: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
+}
+/* 输入栏内容约束到与对话同宽的居中阅读列，超宽屏不再拉满 */
+.composer-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
 }
 .composer textarea {
   flex: 1;
@@ -680,24 +699,31 @@ onMounted(() => loadAgents())
   outline: none;
 }
 html.dark .composer textarea { background: rgba(4, 47, 46, 0.5); }
-.composer textarea:focus { border-color: var(--nook-primary); }
+.composer textarea:focus {
+  border-color: var(--nook-primary);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.16);
+}
 .send-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 44px;
-  padding: 0 16px;
-  border-radius: 14px;
+  padding: 0 18px;
+  border-radius: var(--r-sm);
   border: none;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 600;
   font-size: 14px;
+  letter-spacing: 0.02em;
   cursor: pointer;
-  transition: filter 160ms ease;
+  box-shadow: 0 10px 22px -12px rgba(20, 184, 166, 0.7);
+  transition: filter var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
 }
-.send-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.send-btn:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 16px 30px -12px rgba(20, 184, 166, 0.8); }
+.send-btn:active:not(:disabled) { transform: translateY(0); }
 .send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @media (max-width: 768px) {

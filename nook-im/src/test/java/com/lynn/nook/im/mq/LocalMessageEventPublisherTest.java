@@ -23,7 +23,7 @@ class LocalMessageEventPublisherTest {
 
     @Test
     void publish_delegatesToPushService() {
-        MessageVO msg = MessageVO.builder().id(1L).build();
+        MessageVO msg = MessageVO.builder().id("m1").build();
         NewMessageEvent event = NewMessageEvent.builder()
                 .conversationId(10L)
                 .memberUserIds(List.of(1L, 2L))
@@ -48,12 +48,14 @@ class LocalMessageEventPublisherTest {
         RecallEvent event = RecallEvent.builder()
                 .conversationId(10L)
                 .messageId(99L)
+                .conversationPublicId("c10")
+                .messagePublicId("m99")
                 .memberUserIds(List.of(1L, 2L))
                 .build();
 
         publisher.publishRecall(event);
 
-        verify(pushService).pushRecall(eq(List.of(1L, 2L)), eq(10L), eq(99L));
+        verify(pushService).pushRecall(eq(List.of(1L, 2L)), eq("c10"), eq("m99"));
     }
 
     @Test
@@ -68,13 +70,14 @@ class LocalMessageEventPublisherTest {
     void publishPresence_delegatesToPushService() {
         PresenceEvent event = PresenceEvent.builder()
                 .userId(7L)
+                .userPublicId("u7")
                 .online(true)
                 .friendUserIds(List.of(1L, 2L))
                 .build();
 
         publisher.publishPresence(event);
 
-        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq(7L), eq(true));
+        verify(pushService).pushPresence(eq(List.of(1L, 2L)), eq("u7"), eq(true));
     }
 
     @Test

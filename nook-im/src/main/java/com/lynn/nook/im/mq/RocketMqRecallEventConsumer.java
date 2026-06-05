@@ -29,7 +29,8 @@ public class RocketMqRecallEventConsumer implements RocketMQListener<RecallEvent
     @Override
     public void onMessage(RecallEvent event) {
         if (event == null || event.getMessageId() == null) return;
-        int sent = pushService.pushRecall(event.getMemberUserIds(), event.getConversationId(), event.getMessageId());
+        int sent = pushService.pushRecall(event.getMemberUserIds(),
+                event.getConversationPublicId(), event.getMessagePublicId());
         if (log.isDebugEnabled()) {
             log.debug("mq recall consumed: conv={}, msg={}, locallyDelivered={}",
                     event.getConversationId(), event.getMessageId(), sent);

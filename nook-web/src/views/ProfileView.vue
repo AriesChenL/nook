@@ -70,7 +70,7 @@ async function onSave() {
         </div>
         <div class="meta">
           <div class="name">{{ auth.displayName }}</div>
-          <div class="id">@{{ auth.user?.username }} · ID {{ auth.user?.userId }}</div>
+          <div class="id">@{{ auth.user?.username }}</div>
           <div class="stats">
             <span><strong>{{ stats.friends }}</strong> 好友</span>
             <span><strong>{{ stats.groups }}</strong> 群组</span>
@@ -104,9 +104,6 @@ async function onSave() {
         <h3>账号</h3>
         <div class="kv">
           <span class="k">用户名</span><span class="v">{{ auth.user?.username }}</span>
-        </div>
-        <div class="kv">
-          <span class="k">用户 ID</span><span class="v">{{ auth.user?.userId }}</span>
         </div>
         <div class="kv">
           <span class="k">密码</span><span class="v">已设置 · <a class="link">修改</a></span>
@@ -176,7 +173,7 @@ async function onSave() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #14b8a6, #fb923c);
+  background: var(--nook-gradient-brand);
   color: #fff;
   font-family: var(--nook-font-display);
   font-weight: 700;
@@ -256,7 +253,7 @@ html.dark .field textarea {
   cursor: pointer;
 }
 .btn.primary {
-  background: linear-gradient(135deg, #14b8a6, #0f766e);
+  background: var(--nook-gradient-teal);
   color: #fff;
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.06); }

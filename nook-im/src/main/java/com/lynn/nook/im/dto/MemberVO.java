@@ -14,7 +14,8 @@ import java.time.OffsetDateTime;
 @AllArgsConstructor
 public class MemberVO {
 
-    private Long userId;
+    /** 成员的 user public_id（脱敏对外标识）。 */
+    private String userId;
     /** 1=普通 2=管理员 3=群主 */
     private Short role;
     private OffsetDateTime joinedAt;

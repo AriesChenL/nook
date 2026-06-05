@@ -20,6 +20,10 @@ public class AiAgent {
     @Id(keyType = KeyType.Auto)
     private Long id;
 
+    /** 对外不可枚举标识（UUID 文本），用于 API/URL/UI；内部仍用数字主键 id。 */
+    @Column("public_id")
+    private String publicId;
+
     @Column("owner_user_id")
     private Long ownerUserId;
 

@@ -22,6 +22,7 @@ public class PresenceBroadcastService {
 
     private final UserClient userClient;
     private final MessageEventPublisher eventPublisher;
+    private final IdResolver idResolver;
 
     public void onOnline(Long userId) {
         broadcast(userId, true);
@@ -34,8 +35,15 @@ public class PresenceBroadcastService {
     private void broadcast(Long userId, boolean online) {
         List<Long> friendIds = fetchFriendIds(userId);
         if (friendIds.isEmpty()) return;
+        // 推给前端的 presence 帧里 userId 用 public_id；取不到则跳过广播（脱敏前提缺失）
+        String userPublicId = idResolver.userPublicIds(List.of(userId)).get(userId);
+        if (userPublicId == null) {
+            log.warn("取用户 public_id 失败，跳过在线状态广播：user={}", userId);
+            return;
+        }
         eventPublisher.publishPresence(PresenceEvent.builder()
                 .userId(userId)
+                .userPublicId(userPublicId)
                 .online(online)
                 .friendUserIds(friendIds)
                 .build());

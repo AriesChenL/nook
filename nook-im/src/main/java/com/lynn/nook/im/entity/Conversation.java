@@ -18,6 +18,10 @@ public class Conversation {
     @Id(keyType = KeyType.Auto)
     private Long id;
 
+    /** 不可枚举的对外标识（UUID），前端可见的会话 id 用它。内部仍用数字主键。 */
+    @Column("public_id")
+    private String publicId;
+
     private Short type;
 
     private String name;

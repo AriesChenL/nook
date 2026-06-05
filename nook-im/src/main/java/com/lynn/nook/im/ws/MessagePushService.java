@@ -29,15 +29,18 @@ public class MessagePushService {
         return sessionManager.sendToUsers(memberUserIds, payload);
     }
 
-    /** 推送撤回事件：客户端据此把对应消息从 UI 移除或替换为"已撤回"占位。 */
-    public int pushRecall(Collection<Long> memberUserIds, Long conversationId, Long messageId) {
+    /**
+     * 推送撤回事件：客户端据此把对应消息从 UI 移除或替换为"已撤回"占位。
+     * 路由按数字 memberUserIds；帧内 conversationId/messageId 用 public_id（脱敏）。
+     */
+    public int pushRecall(Collection<Long> memberUserIds, String conversationPublicId, String messagePublicId) {
         if (memberUserIds == null || memberUserIds.isEmpty()) return 0;
         try {
             String payload = objectMapper.writeValueAsString(Map.of(
                     "type", "recall",
                     "data", Map.of(
-                            "conversationId", conversationId,
-                            "messageId", messageId
+                            "conversationId", conversationPublicId,
+                            "messageId", messagePublicId
                     )
             ));
             return sessionManager.sendToUsers(memberUserIds, payload);
@@ -47,14 +50,17 @@ public class MessagePushService {
         }
     }
 
-    /** 推送在线状态变更给好友：`{type:"presence", data:{userId, online}}`。 */
-    public int pushPresence(Collection<Long> friendUserIds, Long userId, boolean online) {
+    /**
+     * 推送在线状态变更给好友：`{type:"presence", data:{userId, online}}`。
+     * 路由按数字 friendUserIds；帧内 userId 用 public_id（脱敏）。
+     */
+    public int pushPresence(Collection<Long> friendUserIds, String userPublicId, boolean online) {
         if (friendUserIds == null || friendUserIds.isEmpty()) return 0;
         try {
             String payload = objectMapper.writeValueAsString(Map.of(
                     "type", "presence",
                     "data", Map.of(
-                            "userId", userId,
+                            "userId", userPublicId,
                             "online", online
                     )
             ));

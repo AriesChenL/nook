@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 系统消息（content_type=4）写入与推送。
@@ -46,6 +47,7 @@ public class SystemMessageService {
      */
     public void post(Long conversationId, Long operatorId, Map<String, Object> body, List<Long> recipientIds) {
         Message m = new Message();
+        m.setPublicId(UUID.randomUUID().toString());
         m.setConversationId(conversationId);
         m.setSenderId(operatorId);
         m.setContentType(Message.TYPE_SYSTEM);

@@ -161,7 +161,7 @@ class AuthServiceTest {
     @Test
     void login_issuesTokenAndStoresInRedis() {
         User u = new User();
-        u.setId(7L); u.setUsername("alice"); u.setNickname("Ally");
+        u.setId(7L); u.setPublicId("pub-7"); u.setUsername("alice"); u.setNickname("Ally");
         u.setPasswordHash("HASH"); u.setStatus((short) 1);
         when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(u);
         when(passwordEncoder.matches("secret", "HASH")).thenReturn(true);
@@ -171,7 +171,8 @@ class AuthServiceTest {
 
         LoginResponse resp = authService.login(req);
 
-        assertThat(resp.getUserId()).isEqualTo(7L);
+        // 对外只暴露 public_id（脱敏）；Redis/JWT 内部仍用数字 id
+        assertThat(resp.getUserId()).isEqualTo("pub-7");
         assertThat(resp.getUsername()).isEqualTo("alice");
         assertThat(resp.getNickname()).isEqualTo("Ally");
         assertThat(resp.getToken()).isNotBlank();
@@ -230,13 +231,14 @@ class AuthServiceTest {
     @Test
     void me_returnsUserView() {
         User u = new User();
-        u.setId(1L); u.setUsername("alice"); u.setNickname("Ally");
+        u.setId(1L); u.setPublicId("pub-1"); u.setUsername("alice"); u.setNickname("Ally");
         u.setEmail("a@b.c"); u.setStatus((short) 1);
         when(userMapper.selectOneById(1L)).thenReturn(u);
 
         MeResponse me = authService.me(1L);
 
-        assertThat(me.getId()).isEqualTo(1L);
+        // 对外 id 输出 public_id（脱敏）
+        assertThat(me.getId()).isEqualTo("pub-1");
         assertThat(me.getUsername()).isEqualTo("alice");
         assertThat(me.getEmail()).isEqualTo("a@b.c");
     }

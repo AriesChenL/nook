@@ -46,41 +46,41 @@ public class AiAgentController {
 
     @GetMapping("/agents/{id}")
     public Result<AgentVO> get(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                               @PathVariable Long id) {
-        return Result.ok(agentService.get(userId, id));
+                               @PathVariable("id") String agentPublicId) {
+        return Result.ok(agentService.get(userId, agentService.resolveAgentId(agentPublicId)));
     }
 
     @PutMapping("/agents/{id}")
     public Result<AgentVO> update(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                                  @PathVariable Long id,
+                                  @PathVariable("id") String agentPublicId,
                                   @Valid @RequestBody UpdateAgentRequest req) {
-        return Result.ok(agentService.update(userId, id, req));
+        return Result.ok(agentService.update(userId, agentService.resolveAgentId(agentPublicId), req));
     }
 
     @DeleteMapping("/agents/{id}")
     public Result<Void> delete(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                               @PathVariable Long id) {
-        agentService.delete(userId, id);
+                               @PathVariable("id") String agentPublicId) {
+        agentService.delete(userId, agentService.resolveAgentId(agentPublicId));
         return Result.ok();
     }
 
     @PostMapping("/agents/{id}/sessions")
     public Result<ChatSessionVO> createSession(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                                               @PathVariable Long id,
+                                               @PathVariable("id") String agentPublicId,
                                                @RequestBody(required = false) CreateSessionRequest req) {
-        return Result.ok(agentService.createSession(userId, id, req));
+        return Result.ok(agentService.createSession(userId, agentService.resolveAgentId(agentPublicId), req));
     }
 
     @GetMapping("/agents/{id}/sessions")
     public Result<List<ChatSessionVO>> sessions(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                                                @PathVariable Long id) {
-        return Result.ok(agentService.listSessions(userId, id));
+                                                @PathVariable("id") String agentPublicId) {
+        return Result.ok(agentService.listSessions(userId, agentService.resolveAgentId(agentPublicId)));
     }
 
     @PostMapping("/agents/{id}/chat")
     public Result<ChatReplyVO> chat(@RequestHeader(RequestHeaders.USER_ID) Long userId,
-                                    @PathVariable Long id,
+                                    @PathVariable("id") String agentPublicId,
                                     @Valid @RequestBody ChatRequest req) {
-        return Result.ok(chatService.chat(userId, id, req));
+        return Result.ok(chatService.chat(userId, agentService.resolveAgentId(agentPublicId), req));
     }
 }

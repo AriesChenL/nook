@@ -31,11 +31,12 @@ public class FriendService {
     private final FriendRequestMapper requestMapper;
     private final FriendshipMapper friendshipMapper;
     private final UserAccountMapper userMapper;
+    private final UserService userService;
 
-    /** 发送好友申请。 */
+    /** 发送好友申请。入参 toUserId 为目标用户 public_id（脱敏），入口解析回数字主键。 */
     @Transactional
     public FriendRequestVO sendRequest(Long fromUserId, CreateFriendRequest req) {
-        Long toUserId = req.getToUserId();
+        Long toUserId = userService.resolveId(req.getToUserId());
         if (fromUserId.equals(toUserId)) {
             throw new BusinessException(ResultCode.FRIEND_CANNOT_ADD_SELF);
         }
@@ -55,6 +56,7 @@ public class FriendService {
         }
 
         FriendRequest r = new FriendRequest();
+        r.setPublicId(java.util.UUID.randomUUID().toString());
         r.setFromUserId(fromUserId);
         r.setToUserId(toUserId);
         r.setMessage(req.getMessage());
@@ -66,10 +68,10 @@ public class FriendService {
         return toVO(r);
     }
 
-    /** 接受好友申请：仅接收方可操作。 */
+    /** 接受好友申请：仅接收方可操作。入参 requestPublicId 为申请 public_id（脱敏）。 */
     @Transactional
-    public void accept(Long currentUserId, Long requestId) {
-        FriendRequest r = loadPending(currentUserId, requestId);
+    public void accept(Long currentUserId, String requestPublicId) {
+        FriendRequest r = loadPending(currentUserId, requestPublicId);
         r.setStatus(FriendRequest.STATUS_ACCEPTED);
         r.setUpdatedAt(OffsetDateTime.now());
         requestMapper.update(r);
@@ -78,10 +80,10 @@ public class FriendService {
         addFriendship(r.getToUserId(), r.getFromUserId());
     }
 
-    /** 拒绝好友申请：仅接收方可操作。 */
+    /** 拒绝好友申请：仅接收方可操作。入参 requestPublicId 为申请 public_id（脱敏）。 */
     @Transactional
-    public void reject(Long currentUserId, Long requestId) {
-        FriendRequest r = loadPending(currentUserId, requestId);
+    public void reject(Long currentUserId, String requestPublicId) {
+        FriendRequest r = loadPending(currentUserId, requestPublicId);
         r.setStatus(FriendRequest.STATUS_REJECTED);
         r.setUpdatedAt(OffsetDateTime.now());
         requestMapper.update(r);
@@ -107,9 +109,10 @@ public class FriendService {
                 .toList();
     }
 
-    /** 删除好友：删两条 friendships 记录（双向）。幂等。 */
+    /** 删除好友：删两条 friendships 记录（双向）。幂等。入参 friendPublicId 为好友 public_id（脱敏）。 */
     @Transactional
-    public void removeFriend(Long userId, Long friendUserId) {
+    public void removeFriend(Long userId, String friendPublicId) {
+        Long friendUserId = userService.resolveId(friendPublicId);
         if (userId.equals(friendUserId)) return;
         QueryWrapper qw = QueryWrapper.create()
                 .where("(owner_id = ? and friend_id = ?) or (owner_id = ? and friend_id = ?)",
@@ -117,9 +120,10 @@ public class FriendService {
         friendshipMapper.deleteByQuery(qw);
     }
 
-    /** 修改好友备注。 */
+    /** 修改好友备注。入参 friendPublicId 为好友 public_id（脱敏）。 */
     @Transactional
-    public void updateRemark(Long userId, Long friendUserId, String remark) {
+    public void updateRemark(Long userId, String friendPublicId, String remark) {
+        Long friendUserId = userService.resolveId(friendPublicId);
         QueryWrapper qw = QueryWrapper.create()
                 .where("owner_id = ?", userId).and("friend_id = ?", friendUserId);
         Friendship f = friendshipMapper.selectOneByQuery(qw);
@@ -156,8 +160,12 @@ public class FriendService {
 
     // ---------- helpers ----------
 
-    private FriendRequest loadPending(Long currentUserId, Long requestId) {
-        FriendRequest r = requestMapper.selectOneById(requestId);
+    private FriendRequest loadPending(Long currentUserId, String requestPublicId) {
+        if (requestPublicId == null || requestPublicId.isBlank()) {
+            throw new BusinessException(ResultCode.FRIEND_REQUEST_NOT_FOUND);
+        }
+        QueryWrapper qw = QueryWrapper.create().where("public_id = ?", requestPublicId);
+        FriendRequest r = requestMapper.selectOneByQuery(qw);
         if (r == null || r.getStatus() == null
                 || r.getStatus() != FriendRequest.STATUS_PENDING) {
             throw new BusinessException(ResultCode.FRIEND_REQUEST_NOT_FOUND);

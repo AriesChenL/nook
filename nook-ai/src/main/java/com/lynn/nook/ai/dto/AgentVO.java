@@ -8,7 +8,8 @@ import java.time.OffsetDateTime;
 @Data
 public class AgentVO {
 
-    private Long id;
+    /** agent public_id（对外不可枚举标识，非数字主键） */
+    private String id;
     private Long ownerUserId;
     private String name;
     private String persona;
@@ -20,7 +21,7 @@ public class AgentVO {
 
     public static AgentVO from(AiAgent a) {
         AgentVO vo = new AgentVO();
-        vo.id = a.getId();
+        vo.id = a.getPublicId();
         vo.ownerUserId = a.getOwnerUserId();
         vo.name = a.getName();
         vo.persona = a.getPersona();

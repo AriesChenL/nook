@@ -13,7 +13,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UserVO {
 
-    private Long id;
+    /** 用户对外标识：public_id（脱敏，字符串）。 */
+    private String id;
     private String username;
     private String nickname;
     private String avatarUrl;
@@ -23,7 +24,7 @@ public class UserVO {
     public static UserVO from(UserAccount u) {
         if (u == null) return null;
         return UserVO.builder()
-                .id(u.getId())
+                .id(u.getPublicId())
                 .username(u.getUsername())
                 .nickname(u.getNickname())
                 .avatarUrl(u.getAvatarUrl())
@@ -36,7 +37,7 @@ public class UserVO {
     public static UserVO fromPublic(UserAccount u) {
         if (u == null) return null;
         return UserVO.builder()
-                .id(u.getId())
+                .id(u.getPublicId())
                 .username(u.getUsername())
                 .nickname(u.getNickname())
                 .avatarUrl(u.getAvatarUrl())
