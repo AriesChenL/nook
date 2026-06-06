@@ -17,16 +17,18 @@ import java.util.Map;
 /**
  * PostgreSQL 实现的 agentscope {@link BaseStore}（命名空间 KV，4 方法：get/put/search/delete）。
  *
- * <p>agentscope-harness 的官方 {@code JdbcStore} 仅在 main 分支提供，1.1.0-RC2 未发布，
- * 故按其设计自实现 PG 版：HarnessAgent 的工作区内容（MEMORY.md / memory/ / sessions JSONL 等）
- * 全部经此落表 {@code agentscope_store}，满足「只读文件系统 / 全量入 PG」。
+ * <p>本类是在官方 {@code JdbcStore} 尚未发布时按其设计自实现的 PG 版：HarnessAgent 的工作区内容
+ * （MEMORY.md / memory/ / sessions JSONL 等）全部经此落表 {@code agentscope_store}，满足
+ * 「只读文件系统 / 全量入 PG」。
+ * 注：升级到 agentscope 2.0.0-RC1 后官方已提供 {@code io.agentscope.harness.agent.store.jdbc.JdbcStore}，
+ * 后续可评估替换本自实现（行为/表结构需对齐验证，暂保留现状）。
  *
  * <h2>表结构</h2>
  * <pre>{@code
  * agentscope_store(namespace_path, item_key, value_json TEXT, version BIGINT, updated_at BIGINT,
  *                  PRIMARY KEY(namespace_path, item_key))
  * }</pre>
- * RC2 的 {@link StoreItem} 不含 version，故 version 列仅用于写侧记账，读侧不暴露。
+ * version 列仅用于写侧记账；读侧构造 {@link StoreItem} 不依赖它（2.0 起 StoreItem 带 version，此处不暴露）。
  *
  * <h2>命名空间编码</h2>
  * 段之间用 ASCII unit-separator {@code 0x1F} 连接并以分隔符结尾，从而 {@code search([a,b])} 可用

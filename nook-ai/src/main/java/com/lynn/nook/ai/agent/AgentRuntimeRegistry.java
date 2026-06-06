@@ -61,13 +61,24 @@ public class AgentRuntimeRegistry implements DisposableBean {
 
     /** persona / 配置变更后调用：移除并关闭旧实例，下次重建。 */
     public void invalidate(Long agentId) {
-        cache.remove(agentId); // RC2 的 HarnessAgent 无显式释放方法，交由 GC
+        closeQuietly(cache.remove(agentId));
+    }
+
+    /** HarnessAgent 2.0 起实现 AutoCloseable，移除/关停时显式释放（替代旧版依赖 GC）。 */
+    private void closeQuietly(HarnessAgent agent) {
+        if (agent == null) return;
+        try {
+            agent.close();
+        } catch (Exception e) {
+            log.warn("关闭 HarnessAgent 失败: {}", e.getMessage());
+        }
     }
 
     private HarnessAgent build(AiAgent agent) {
         log.info("构建 HarnessAgent agentId=agent-{} name={}", agent.getId(), agent.getName());
         return HarnessAgent.builder()
-                // RC2 无 builder.agentId()，name 即内部 agentId（唯一稳定）；展示名走 ai_agent.name
+                // name 作为内部 agentId（唯一稳定）；展示名走 ai_agent.name。
+                // 2.0 起 builder 也支持 agentId()，此处仍以 name 承载稳定 id，避免改动已持久化的会话键
                 .name("agent-" + agent.getId())
                 .sysPrompt(agent.getPersona() == null ? "" : agent.getPersona())
                 .model(model)
@@ -82,6 +93,7 @@ public class AgentRuntimeRegistry implements DisposableBean {
 
     @Override
     public void destroy() {
+        cache.values().forEach(this::closeQuietly);
         cache.clear();
     }
 }
