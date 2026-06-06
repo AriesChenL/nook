@@ -121,6 +121,7 @@ async function onGroupCreated(conv: Conversation) {
             <svg v-if="c.type === 2" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
               <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3 19a6 6 0 0 1 12 0M13 19a5 5 0 0 1 8 0" stroke-linecap="round" />
             </svg>
+            <img v-else-if="c.avatarUrl" :src="c.avatarUrl" alt="" />
             <span v-else>{{ convName(c)[0]?.toUpperCase() }}</span>
             <span v-if="c.type === 1 && presence.isOnline(c.peerId)" class="av-dot" />
           </span>
@@ -287,6 +288,13 @@ html.dark .search input {
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
+}
+/* 头像图：圆角随容器，不用 overflow 以免裁掉在线圆点 */
+.conv-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 .av-dot {
   position: absolute;

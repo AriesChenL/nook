@@ -72,6 +72,7 @@ export interface Message {
   conversationId: string
   senderId: string // user public_id
   senderName: string
+  senderAvatar?: string // 非本人消息的发送者头像（本人用 auth 头像）
   contentType: number
   content: string
   fileUrl?: string
@@ -116,6 +117,10 @@ async function resolveUsers(ids: string[], force = false): Promise<void> {
 function userName(id: string): string {
   const u = userCache.get(id)
   return u ? (u.nickname || u.username) : `用户${id}`
+}
+
+function userAvatar(id: string): string | undefined {
+  return userCache.get(id)?.avatarUrl
 }
 
 function myId(): string {
@@ -237,6 +242,7 @@ function mapMessage(vo: MessageVO): Message {
     conversationId: vo.conversationId,
     senderId: vo.senderId,
     senderName: mine ? '我' : userName(vo.senderId),
+    senderAvatar: mine ? undefined : userAvatar(vo.senderId),
     contentType: vo.contentType,
     content,
     fileUrl: vo.fileUrl,

@@ -3,7 +3,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getMe, listFriends, updateProfile } from '@/api/user'
-import { listConversations } from '@/api/im'
+import { listConversations, presignUpload, uploadToStorage } from '@/api/im'
+import AvatarCropper from '@/components/AvatarCropper.vue'
 
 const auth = useAuthStore()
 
@@ -23,7 +24,7 @@ onMounted(async () => {
     form.nickname = me.nickname || me.username
     form.email = me.email ?? ''
     form.phone = me.phone ?? ''
-    if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
+    if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname, avatarUrl: me.avatarUrl })
   } catch {
     /* 拉取失败保留本地缓存 */
   }
@@ -55,6 +56,56 @@ async function onSave() {
     saving.value = false
   }
 }
+
+// ───── 头像：选图 → 裁剪 → 上传 → 保存 ─────
+const avatarInput = ref<HTMLInputElement | null>(null)
+const cropperSrc = ref('')
+const cropperVisible = ref(false)
+const uploadingAvatar = ref(false)
+
+function pickAvatar() {
+  if (uploadingAvatar.value) return
+  avatarInput.value?.click()
+}
+
+function onAvatarFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 允许再次选同一文件
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    ElMessage.error('请选择图片文件')
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('图片不能超过 10MB')
+    return
+  }
+  if (cropperSrc.value) URL.revokeObjectURL(cropperSrc.value)
+  cropperSrc.value = URL.createObjectURL(file)
+  cropperVisible.value = true
+}
+
+async function onCropped(blob: Blob) {
+  cropperVisible.value = false
+  uploadingAvatar.value = true
+  try {
+    const file = new File([blob], `avatar-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    const presigned = await presignUpload(file)
+    await uploadToStorage(presigned.uploadUrl, file)
+    await updateProfile({ avatarUrl: presigned.downloadUrl })
+    auth.setAvatar(presigned.downloadUrl) // 侧栏/资料页即时更新 + 落本地缓存
+    ElMessage.success('头像已更新')
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '头像上传失败')
+  } finally {
+    uploadingAvatar.value = false
+    if (cropperSrc.value) {
+      URL.revokeObjectURL(cropperSrc.value)
+      cropperSrc.value = ''
+    }
+  }
+}
 </script>
 
 <template>
@@ -65,9 +116,21 @@ async function onSave() {
 
     <div class="body">
       <section class="card hero">
-        <div class="avatar-big">
-          {{ (auth.displayName?.[0] ?? '?').toUpperCase() }}
-        </div>
+        <button
+          class="avatar-big"
+          type="button"
+          :aria-busy="uploadingAvatar || undefined"
+          title="点击更换头像"
+          @click="pickAvatar"
+        >
+          <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="头像" class="avatar-img" />
+          <span v-else class="avatar-initial">{{ (auth.displayName?.[0] ?? '?').toUpperCase() }}</span>
+          <span class="avatar-edit">
+            <svg v-if="!uploadingAvatar" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+            <span v-else class="up-dots"><i /><i /><i /></span>
+          </span>
+        </button>
+        <input ref="avatarInput" type="file" accept="image/*" class="hidden-file" @change="onAvatarFile" />
         <div class="meta">
           <div class="name">{{ auth.displayName }}</div>
           <div class="id">@{{ auth.user?.username }}</div>
@@ -112,6 +175,8 @@ async function onSave() {
         </section>
       </div>
     </div>
+
+    <AvatarCropper v-model="cropperVisible" :src="cropperSrc" @confirm="onCropped" />
   </div>
 </template>
 
@@ -184,18 +249,67 @@ async function onSave() {
     var(--nook-surface);
 }
 .avatar-big {
+  position: relative;
+  flex-shrink: 0;
   width: 76px;
   height: 76px;
-  border-radius: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: var(--r-lg);
+  border: none;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
   background: var(--nook-gradient-brand);
   color: #fff;
+  box-shadow: 0 14px 30px -10px rgba(15, 118, 110, 0.45);
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   font-family: var(--nook-font-display);
   font-weight: 700;
   font-size: 32px;
-  box-shadow: 0 14px 30px -10px rgba(15, 118, 110, 0.45);
+}
+/* hover / 上传中浮出相机层 */
+.avatar-edit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 20, 18, 0.45);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.avatar-big:hover .avatar-edit,
+.avatar-big[aria-busy='true'] .avatar-edit { opacity: 1; }
+.avatar-big:focus-visible {
+  outline: 2px solid var(--nook-primary);
+  outline-offset: 2px;
+}
+.hidden-file { display: none; }
+.up-dots { display: inline-flex; gap: 4px; align-items: center; }
+.up-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: av-blink 1s infinite ease-in-out;
+}
+.up-dots i:nth-child(2) { animation-delay: 0.15s; }
+.up-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes av-blink {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.6); }
+  40% { opacity: 1; transform: scale(1); }
 }
 .meta { min-width: 0; }
 .name {

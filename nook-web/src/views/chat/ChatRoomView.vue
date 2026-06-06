@@ -386,7 +386,10 @@ onUnmounted(() => {
   <div class="room">
     <header class="room-head">
       <div class="room-left">
-        <span class="head-avatar">{{ (title?.[0] ?? '?').toUpperCase() }}</span>
+        <span class="head-avatar">
+          <img v-if="conv?.avatarUrl" :src="conv.avatarUrl" alt="" />
+          <template v-else>{{ (title?.[0] ?? '?').toUpperCase() }}</template>
+        </span>
         <div
           class="room-title"
           :class="{ 'room-title--clickable': isDirect }"
@@ -443,7 +446,8 @@ onUnmounted(() => {
           }]">
             <!-- 头像：只在组首条显示，否则占位 -->
             <span v-if="m.isFirst" class="msg-avatar">
-              {{ m.mine ? myInitial : (m.senderName?.[0] ?? '?').toUpperCase() }}
+              <img v-if="m.mine ? auth.user?.avatarUrl : m.senderAvatar" :src="(m.mine ? auth.user?.avatarUrl : m.senderAvatar) || ''" alt="" />
+              <template v-else>{{ m.mine ? myInitial : (m.senderName?.[0] ?? '?').toUpperCase() }}</template>
             </span>
             <span v-else class="msg-avatar-spacer" />
 
@@ -663,7 +667,9 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 15px;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
+.head-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .room-title h3 {
   margin: 0;
   font-family: var(--nook-font-display);
@@ -830,7 +836,9 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   font-size: 14px;
   box-shadow: 0 2px 8px -2px rgba(13, 148, 136, 0.3);
   user-select: none;
+  overflow: hidden;
 }
+.msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .msg.mine .msg-avatar {
   background: linear-gradient(135deg, #0f766e, #134e4a);
 }

@@ -8,6 +8,7 @@ export interface AuthUser {
   userId: string // user public_id 字符串
   username: string
   nickname?: string
+  avatarUrl?: string
 }
 
 function readUser(): AuthUser | null {
@@ -34,6 +35,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem(USER_KEY, JSON.stringify(u))
   }
 
+  // 仅更新头像（设置头像后即时反映到侧栏/资料页，并落本地缓存）
+  function setAvatar(url: string) {
+    if (!user.value) return
+    setAuth(token.value, { ...user.value, avatarUrl: url })
+  }
+
   function clear() {
     token.value = ''
     user.value = null
@@ -41,5 +48,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(USER_KEY)
   }
 
-  return { token, user, displayName, isLoggedIn, setAuth, clear }
+  return { token, user, displayName, isLoggedIn, setAuth, setAvatar, clear }
 })

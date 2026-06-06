@@ -140,7 +140,10 @@ async function onLogout() {
 
       <div class="sidebar-foot">
         <div class="user-chip">
-          <span class="avatar">{{ (auth.displayName?.[0] ?? '?').toUpperCase() }}</span>
+          <span class="avatar">
+            <img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" alt="" />
+            <template v-else>{{ (auth.displayName?.[0] ?? '?').toUpperCase() }}</template>
+          </span>
           <div class="who">
             <span class="who-name">{{ auth.displayName }}</span>
             <span class="who-id">@{{ auth.user?.username }}</span>
@@ -327,6 +330,7 @@ html.dark .nav-item.active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
   border-radius: var(--r-sm);
@@ -336,6 +340,12 @@ html.dark .nav-item.active {
   font-weight: 700;
   font-size: 15px;
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .who {
   display: flex;
