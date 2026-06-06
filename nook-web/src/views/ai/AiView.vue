@@ -9,6 +9,7 @@ import {
   createAgent,
   deleteAgent,
   listAgents,
+  listAgentMessages,
   listSessions,
   updateAgent,
   type Agent,
@@ -27,7 +28,7 @@ const agents = ref<Agent[]>([])
 const currentAgentId = ref<string | null>(null)
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | null>(null)
-// 会话 → 对话流（仅本次浏览器会话内存；后端记忆持久，历史接口为后续）
+// 会话 → 对话流。首次进入某 Agent 时从后端拉历史填充；之后增量追加。
 // key 为 session public_id 字符串，或新建会话前的临时桶 NEW_BUCKET。
 const turnsBySession = reactive<Record<string, ChatTurn[]>>({})
 
@@ -83,6 +84,17 @@ async function selectAgent(id: string) {
     ElMessage.error(e?.message ?? '加载会话失败')
     sessions.value = []
     currentSessionId.value = null
+  }
+  // 加载该 Agent 之前的对话历史（仅首次进入时拉，已有内存对话则不覆盖）
+  const sid = currentSessionId.value
+  if (sid && !turnsBySession[sid]) {
+    try {
+      const msgs = await listAgentMessages(id)
+      turnsBySession[sid] = msgs.map((m, i) => ({ id: i + 1, role: m.role, content: m.content }))
+      scrollBottom()
+    } catch {
+      /* 历史加载失败不阻塞当前会话 */
+    }
   }
 }
 

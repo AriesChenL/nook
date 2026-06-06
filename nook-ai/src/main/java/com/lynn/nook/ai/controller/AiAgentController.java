@@ -1,6 +1,7 @@
 package com.lynn.nook.ai.controller;
 
 import com.lynn.nook.ai.dto.AgentVO;
+import com.lynn.nook.ai.dto.ChatMessageVO;
 import com.lynn.nook.ai.dto.ChatReplyVO;
 import com.lynn.nook.ai.dto.ChatRequest;
 import com.lynn.nook.ai.dto.ChatSessionVO;
@@ -82,5 +83,12 @@ public class AiAgentController {
                                     @PathVariable("id") String agentPublicId,
                                     @Valid @RequestBody ChatRequest req) {
         return Result.ok(chatService.chat(userId, agentService.resolveAgentId(agentPublicId), req));
+    }
+
+    /** 该 Agent 当前会话的可见历史消息（按时间顺序），用于打开 Agent 时加载之前的对话。 */
+    @GetMapping("/agents/{id}/messages")
+    public Result<List<ChatMessageVO>> messages(@RequestHeader(RequestHeaders.USER_ID) Long userId,
+                                                @PathVariable("id") String agentPublicId) {
+        return Result.ok(chatService.listMessages(userId, agentService.resolveAgentId(agentPublicId)));
     }
 }

@@ -30,6 +30,13 @@ export interface ChatReply {
   reply: string
 }
 
+export interface ChatMessage {
+  id: string // 消息 public_id
+  role: 'user' | 'assistant'
+  content: string
+  createdAt?: string
+}
+
 export interface CreateAgentBody {
   name: string
   persona?: string
@@ -132,4 +139,10 @@ export async function chat(agentId: string, content: string, sessionId?: string)
     return { sessionId: sessionId ?? 'sess-1', reply }
   }
   return http.post<unknown, ChatReply>(`/ai/agents/${agentId}/chat`, { sessionId, content })
+}
+
+// 该 Agent 当前会话的历史消息（打开 Agent 时加载之前的对话）
+export async function listAgentMessages(agentId: string): Promise<ChatMessage[]> {
+  if (USE_MOCK) return delay([])
+  return http.get<unknown, ChatMessage[]>(`/ai/agents/${agentId}/messages`)
 }
