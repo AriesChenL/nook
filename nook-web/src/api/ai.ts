@@ -1,5 +1,6 @@
 import http from './http'
 import { USE_MOCK, delay, mockAiPresets } from './_mock'
+import { useAuthStore } from '@/stores/auth'
 
 // 欢迎页的建议 prompt（纯前端文案，复用 mock 里的预设）
 export const aiPresets = mockAiPresets
@@ -139,6 +140,89 @@ export async function chat(agentId: string, content: string, sessionId?: string)
     return { sessionId: sessionId ?? 'sess-1', reply }
   }
   return http.post<unknown, ChatReply>(`/ai/agents/${agentId}/chat`, { sessionId, content })
+}
+
+// ───── 流式对话（SSE：边生成边推增量）─────
+export interface ChatStreamHandlers {
+  onDelta: (text: string) => void // 收到一段答案增量
+  onDone: (sessionId: string, text: string) => void // 生成结束：回传会话 public_id + 权威全文（用于校正）
+  onError: (message: string) => void // 服务端 error 事件
+}
+
+/**
+ * 经 SSE 流式对话。用 fetch 手动读流（EventSource 不支持自定义 Authorization 头 + POST body）。
+ * 后端事件：delta `{t}` / done `{sessionId}` / error `{message}`。
+ */
+export async function chatStream(
+  agentId: string,
+  content: string,
+  sessionId: string | undefined,
+  handlers: ChatStreamHandlers
+): Promise<void> {
+  if (USE_MOCK) {
+    const full = `（mock 流式回复）收到你的问题：**${content}**\n\n逐字流出示例……`
+    for (const ch of full) {
+      await delay(undefined, 18)
+      handlers.onDelta(ch)
+    }
+    handlers.onDone(sessionId ?? 'sess-1', full)
+    return
+  }
+
+  const auth = useAuthStore()
+  const resp = await fetch(`/api/ai/agents/${agentId}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {})
+    },
+    body: JSON.stringify({ sessionId, content })
+  })
+  if (resp.status === 401) {
+    handlers.onError('登录已过期')
+    return
+  }
+  if (!resp.ok || !resp.body) {
+    handlers.onError(`请求失败（HTTP ${resp.status}）`)
+    return
+  }
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let sep: number
+    // SSE 以空行（\n\n）分隔事件
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep)
+      buffer = buffer.slice(sep + 2)
+      dispatchSseFrame(frame, handlers)
+    }
+  }
+}
+
+function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers) {
+  let event = 'message'
+  let data = ''
+  for (const rawLine of frame.split('\n')) {
+    const line = rawLine.replace(/\r$/, '')
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) data += line.slice(5).trim()
+  }
+  if (!data) return
+  let payload: { t?: string; sessionId?: string; text?: string; message?: string }
+  try {
+    payload = JSON.parse(data)
+  } catch {
+    return
+  }
+  if (event === 'delta') handlers.onDelta(payload.t ?? '')
+  else if (event === 'done') handlers.onDone(payload.sessionId ?? '', payload.text ?? '')
+  else if (event === 'error') handlers.onError(payload.message ?? 'AI 服务异常')
 }
 
 // 该 Agent 当前会话的历史消息（打开 Agent 时加载之前的对话）

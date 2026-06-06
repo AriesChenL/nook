@@ -5,7 +5,7 @@ import NookModal from '@/components/NookModal.vue'
 import { confirm } from '@/composables/useConfirm'
 import {
   aiPresets,
-  chat,
+  chatStream,
   createAgent,
   deleteAgent,
   listAgents,
@@ -98,7 +98,7 @@ async function selectAgent(id: string) {
   }
 }
 
-// ───── 对话（后端同步返回完整回复）─────
+// ───── 对话（SSE 流式：边生成边追加增量）─────
 async function ask(prompt: string) {
   const agentId = currentAgentId.value
   if (sending.value || !prompt.trim() || !agentId) return
@@ -115,16 +115,31 @@ async function ask(prompt: string) {
   sending.value = true
   scrollBottom()
 
+  let failed = false
   try {
-    const res = await chat(agentId, prompt, currentSessionId.value ?? undefined)
-    bucket[aiIndex].content = res.reply || '（无回复）'
-    // 首次对话：后端自动建了默认会话，把临时桶迁移到真实 sessionId
-    if (currentSessionId.value == null && res.sessionId != null) {
-      turnsBySession[res.sessionId] = bucket
-      delete turnsBySession[NEW_BUCKET]
-      currentSessionId.value = res.sessionId
-      listSessions(agentId).then((s) => (sessions.value = s)).catch(() => {})
-    }
+    await chatStream(agentId, prompt, currentSessionId.value ?? undefined, {
+      onDelta: (t) => {
+        bucket[aiIndex].content += t
+        scrollBottom()
+      },
+      onDone: (sid, text) => {
+        // 用权威全文校正（流式增量可能与最终结果有细微出入）
+        if (text) bucket[aiIndex].content = text
+        // 首次对话：后端自动建了默认会话，把临时桶迁移到真实 sessionId
+        if (currentSessionId.value == null && sid) {
+          turnsBySession[sid] = bucket
+          delete turnsBySession[NEW_BUCKET]
+          currentSessionId.value = sid
+          listSessions(agentId).then((s) => (sessions.value = s)).catch(() => {})
+        }
+      },
+      onError: (msg) => {
+        failed = true
+        bucket[aiIndex].content = `⚠ 出错了：${msg}`
+        ElMessage.error('AI 请求失败')
+      }
+    })
+    if (!failed && !bucket[aiIndex].content) bucket[aiIndex].content = '（无回复）'
   } catch (e: any) {
     bucket[aiIndex].content = `⚠ 出错了：${e?.message ?? '未知错误'}`
     ElMessage.error('AI 请求失败')

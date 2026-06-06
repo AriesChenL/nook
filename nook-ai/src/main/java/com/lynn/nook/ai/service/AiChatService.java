@@ -13,15 +13,21 @@ import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.mybatisflex.core.query.QueryWrapper;
 import io.agentscope.core.agent.RuntimeContext;
+import io.agentscope.core.event.AgentEventType;
+import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -62,6 +68,75 @@ public class AiChatService {
             log.error("AI 对话失败 agentId={} sessionId={}", agentId, sessionId, e);
             throw new BusinessException(ResultCode.AI_MODEL_ERROR);
         }
+    }
+
+    /** SSE 帧超时（含模型生成时间）：5 分钟够一轮对话，超时由 MVC 关闭 emitter。 */
+    private static final long SSE_TIMEOUT_MS = 300_000L;
+
+    /**
+     * 流式对话：用 {@link HarnessAgent#stream} 边生成边把答案增量经 SSE 推给前端。
+     * <p>SSE 事件约定：
+     * <ul>
+     *   <li>{@code delta} —— {@code {"t":"<增量文本>"}}，逐块拼接成完整回复</li>
+     *   <li>{@code done}  —— {@code {"sessionId":"<会话 public_id>"}}，首轮对话用于把临时会话落到真实 id</li>
+     *   <li>{@code error} —— {@code {"message":"..."}}</li>
+     * </ul>
+     * 用 {@link HarnessAgent#streamEvents} 的细粒度事件流（2.0 新 API），只取
+     * {@link AgentEventType#TEXT_BLOCK_DELTA}（答案 token 增量），累积即完整回复，不混入思考/工具事件。
+     * 成功结束后才落库用户消息 + 助手回复，失败不污染历史。
+     */
+    public SseEmitter chatStream(Long ownerUserId, Long agentId, ChatRequest req) {
+        AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
+        AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
+        Long sessionId = session.getId();
+        String userContent = req.getContent();
+
+        HarnessAgent ha = registry.get(agent);
+        RuntimeContext ctx = RuntimeContext.builder()
+                .userId(String.valueOf(ownerUserId))
+                .sessionId("sess-" + sessionId)
+                .build();
+        Msg userMsg = Msg.builder().role(MsgRole.USER).textContent(userContent).build();
+
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        StringBuilder answer = new StringBuilder();  // 累积 TEXT_BLOCK_DELTA = 完整回复
+
+        ha.streamEvents(userMsg, ctx)
+                .publishOn(Schedulers.boundedElastic())  // 下游回调（含阻塞 JDBC 落库 / emitter 发送）切到弹性线程
+                .subscribe(
+                        event -> {
+                            // 只取答案文本增量；思考块 / 工具调用 / 起止等事件不推给用户
+                            if (event.getType() != AgentEventType.TEXT_BLOCK_DELTA) return;
+                            String delta = ((TextBlockDeltaEvent) event).getDelta();
+                            if (delta == null || delta.isEmpty()) return;
+                            answer.append(delta);
+                            try {
+                                emitter.send(SseEmitter.event().name("delta").data(Map.of("t", delta)));
+                            } catch (IOException e) {
+                                throw new IllegalStateException("SSE 发送失败（客户端可能已断开）", e);
+                            }
+                        },
+                        error -> {
+                            log.error("AI 流式对话失败 agentId={} sessionId={}", agentId, sessionId, error);
+                            try {
+                                emitter.send(SseEmitter.event().name("error").data(Map.of("message", "AI 服务异常")));
+                            } catch (IOException ignored) {
+                            }
+                            emitter.completeWithError(error);
+                        },
+                        () -> {
+                            String text = answer.toString();
+                            persist(sessionId, "user", userContent);
+                            persist(sessionId, "assistant", text);
+                            try {
+                                emitter.send(SseEmitter.event().name("done")
+                                        .data(Map.of("sessionId", session.getPublicId(), "text", text)));
+                            } catch (IOException ignored) {
+                            }
+                            emitter.complete();
+                        }
+                );
+        return emitter;
     }
 
     private void persist(Long sessionId, String role, String content) {

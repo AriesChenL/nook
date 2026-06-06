@@ -14,6 +14,7 @@ import com.lynn.nook.common.constant.RequestHeaders;
 import com.lynn.nook.common.result.Result;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -83,6 +85,14 @@ public class AiAgentController {
                                     @PathVariable("id") String agentPublicId,
                                     @Valid @RequestBody ChatRequest req) {
         return Result.ok(chatService.chat(userId, agentService.resolveAgentId(agentPublicId), req));
+    }
+
+    /** 流式对话：SSE 推送答案增量（delta / done / error 事件，详见 {@link AiChatService#chatStream}）。 */
+    @PostMapping(value = "/agents/{id}/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestHeader(RequestHeaders.USER_ID) Long userId,
+                                 @PathVariable("id") String agentPublicId,
+                                 @Valid @RequestBody ChatRequest req) {
+        return chatService.chatStream(userId, agentService.resolveAgentId(agentPublicId), req);
     }
 
     /** 该 Agent 当前会话的可见历史消息（按时间顺序），用于打开 Agent 时加载之前的对话。 */
