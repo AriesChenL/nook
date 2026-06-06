@@ -16,6 +16,10 @@ const friendStore = useFriendStore()
 function convName(c: Conversation): string {
   return (c.type === 1 ? friendStore.remarkFor(c.peerId) : undefined) || c.name
 }
+// 该单聊设了备注：用于在备注后再附上原昵称
+function convRemark(c: Conversation): string | undefined {
+  return c.type === 1 ? friendStore.remarkFor(c.peerId) : undefined
+}
 
 const conversations = ref<Conversation[]>([])
 const loading = ref(true)
@@ -122,7 +126,7 @@ async function onGroupCreated(conv: Conversation) {
           </span>
           <div class="conv-body">
             <div class="conv-row">
-              <span class="conv-name">{{ convName(c) }}<span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span></span>
+              <span class="conv-name">{{ convName(c) }}<span v-if="convRemark(c)" class="conv-nick">（{{ c.name }}）</span><span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span></span>
               <span class="conv-time">{{ c.lastMessageAt }}</span>
             </div>
             <div class="conv-row">
@@ -313,6 +317,12 @@ html.dark .search input {
   white-space: nowrap;
 }
 .conv-count {
+  margin-left: 4px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--nook-text-muted);
+}
+.conv-nick {
   margin-left: 4px;
   font-weight: 400;
   font-size: 12px;

@@ -46,11 +46,14 @@ const presence = usePresenceStore()
 const friendStore = useFriendStore()
 const isGroup = computed(() => conv.value?.type === 2)
 const peerOnline = computed(() => presence.isOnline(conv.value?.peerId))
+// 单聊设的好友备注（无则 undefined）
+const peerRemark = computed(() =>
+  conv.value?.type === 1 ? friendStore.remarkFor(conv.value?.peerId) : undefined
+)
 // 单聊标题优先用好友备注（微信式），其余回退到会话名
-const title = computed(() => {
-  const remark = conv.value?.type === 1 ? friendStore.remarkFor(conv.value?.peerId) : undefined
-  return remark || conv.value?.name || `会话 #${conversationId.value}`
-})
+const title = computed(() => peerRemark.value || conv.value?.name || `会话 #${conversationId.value}`)
+// 设了备注时，标题旁附带原昵称（conv.name 即对端真实昵称）
+const peerNickname = computed(() => (peerRemark.value ? conv.value?.name : ''))
 const subtitle = computed(() => {
   if (conv.value?.type === 2) return `${conv.value.members ?? 0} 位成员`
   return peerOnline.value ? '在线' : '离线'
@@ -268,7 +271,7 @@ onUnmounted(() => {
       <div class="room-left">
         <span class="head-avatar">{{ (title?.[0] ?? '?').toUpperCase() }}</span>
         <div class="room-title">
-          <h3>{{ title }}</h3>
+          <h3>{{ title }}<span v-if="peerNickname" class="nick-suffix">（{{ peerNickname }}）</span></h3>
           <span class="sub">
             <span v-if="!isGroup" class="online-dot" :class="{ off: !peerOnline }" />
             {{ subtitle }}
@@ -447,6 +450,13 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 700;
   color: var(--nook-text);
+}
+.nick-suffix {
+  margin-left: 6px;
+  font-family: var(--nook-font-sans);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--nook-text-muted);
 }
 .sub {
   display: inline-flex;
