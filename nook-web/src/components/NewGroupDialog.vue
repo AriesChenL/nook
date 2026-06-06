@@ -156,18 +156,30 @@ async function submit() {
   backdrop-filter: blur(4px);
 }
 .panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 420px;
+  max-width: 440px;
   max-height: 80vh;
-  border-radius: 20px;
+  border-radius: var(--r-xl);
   border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 30px 60px -20px rgba(15, 118, 110, 0.45);
+  background: var(--nook-surface-raised);
+  backdrop-filter: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-strong);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
+}
+/* 顶部高光线，与 NookModal 一致的玻璃边缘 */
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+}
+:global(html.dark) .panel::before {
+  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.4), transparent);
 }
 .panel-head {
   display: flex;
@@ -188,7 +200,7 @@ async function submit() {
   height: 30px;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   border: none;
   background: transparent;
   color: var(--nook-text-muted);
@@ -206,7 +218,7 @@ async function submit() {
   width: 100%;
   height: 40px;
   padding: 0 14px;
-  border-radius: 11px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--nook-surface-border);
   background: rgba(255, 255, 255, 0.6);
   font: inherit;
@@ -232,8 +244,8 @@ html.dark .field input {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
   background: rgba(20, 184, 166, 0.12);
   color: var(--nook-primary-deep);
   font-size: 12.5px;
@@ -269,7 +281,7 @@ html.dark .chip {
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: 11px;
+  border-radius: var(--r-sm);
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -305,7 +317,7 @@ html.dark .chip {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
@@ -335,8 +347,8 @@ html.dark .chip {
 }
 .btn {
   height: 36px;
-  padding: 0 16px;
-  border-radius: 10px;
+  padding: 0 18px;
+  border-radius: var(--r-sm);
   border: none;
   font: inherit;
   font-size: 13.5px;
@@ -363,15 +375,31 @@ html.dark .chip {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 200ms ease;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.fade-enter-active .panel {
+  transition: transform var(--dur-slow) var(--ease-spring), opacity var(--dur-slow) var(--ease-out);
+}
+.fade-leave-active .panel {
+  transition: transform 160ms ease, opacity 160ms ease;
 }
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
+.fade-enter-from .panel {
+  opacity: 0;
+  transform: translateY(18px) scale(0.96);
+}
+.fade-leave-to .panel {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
 @media (prefers-reduced-motion: reduce) {
   .fade-enter-active,
-  .fade-leave-active {
+  .fade-leave-active,
+  .fade-enter-active .panel,
+  .fade-leave-active .panel {
     transition: none;
   }
 }

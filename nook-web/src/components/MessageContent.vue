@@ -80,51 +80,74 @@ function openImage() {
 }
 .msg-image {
   display: block;
-  max-width: 240px;
-  max-height: 280px;
-  border-radius: 10px;
+  max-width: 260px;
+  max-height: 300px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--nook-surface-border);
+  box-shadow: var(--shadow-sm);
   object-fit: cover;
   cursor: zoom-in;
+  transition: filter var(--dur) var(--ease-out), transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+.msg-image:hover {
+  filter: brightness(1.03);
+  transform: scale(1.01);
+  box-shadow: var(--shadow-md);
 }
 .msg-video {
   display: block;
-  max-width: 280px;
+  max-width: 300px;
   max-height: 320px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--nook-surface-border);
   background: #000;
 }
 .msg-audio {
-  width: 240px;
+  width: 260px;
   height: 40px;
 }
 .msg-file {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 180px;
-  max-width: 260px;
+  gap: var(--space-3);
+  min-width: 200px;
+  max-width: 280px;
+  padding: 2px;
+  border-radius: var(--r-sm);
   text-decoration: none;
   color: inherit;
+  transition: opacity var(--dur) var(--ease-out);
 }
+.msg-file:hover { opacity: 0.92; }
+/* 文件图标做成柔青底圆角芯片 */
 .file-icon {
   flex-shrink: 0;
   display: inline-flex;
-  opacity: 0.85;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  background: var(--nook-gradient-wash);
+  color: var(--nook-primary-deep);
 }
+:global(html.dark) .file-icon { color: var(--nook-primary-soft); }
 .file-info {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  gap: 2px;
 }
 .file-name {
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .file-size {
-  font-size: 11px;
+  font-size: var(--text-xs);
   opacity: 0.7;
 }
 </style>

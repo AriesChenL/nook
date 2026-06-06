@@ -305,14 +305,19 @@ async function onConfirmAdd() {
 .drawer {
   display: flex;
   flex-direction: column;
-  width: 360px;
+  width: 380px;
   max-width: 88vw;
   height: 100%;
   border-left: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: -20px 0 50px -20px rgba(15, 118, 110, 0.4);
+  backdrop-filter: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-strong);
+  box-shadow: var(--shadow-lg);
+  animation: drawer-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 .d-head {
   display: flex;
@@ -425,13 +430,14 @@ html.dark .name-row input {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 8px 6px;
+  padding: 8px 8px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: transparent;
   text-align: left;
   font: inherit;
 }
+.m-row:hover { background: rgba(20, 184, 166, 0.06); }
 .pick-row {
   cursor: pointer;
   transition: background 150ms ease;
@@ -446,7 +452,7 @@ html.dark .name-row input {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
