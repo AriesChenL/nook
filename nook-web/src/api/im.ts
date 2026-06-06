@@ -98,14 +98,18 @@ export interface Member {
 // userId 为 user public_id 字符串，仅作不透明句柄做相等/Map key，不做数值运算。
 const userCache = new Map<string, UserVO>()
 
-async function resolveUsers(ids: string[]): Promise<void> {
-  const missing = [...new Set(ids)].filter((id) => id && !userCache.has(id))
-  if (!missing.length) return
-  const fetched = await getUsersByIds(missing).catch(() => [] as UserVO[])
+// force=true 时无视缓存重新拉取（用于会话列表/详情，保证对端改名、换头像后即时生效，
+// 不必整页刷新）；其余场景默认只补未命中的，避免无谓请求。
+async function resolveUsers(ids: string[], force = false): Promise<void> {
+  const uniq = [...new Set(ids)].filter((id) => !!id)
+  const targets = force ? uniq : uniq.filter((id) => !userCache.has(id))
+  if (!targets.length) return
+  const fetched = await getUsersByIds(targets).catch(() => [] as UserVO[])
   const byId = new Map(fetched.map((u) => [u.id, u]))
-  missing.forEach((id) => {
+  targets.forEach((id) => {
     const u = byId.get(id)
-    userCache.set(id, u ?? { id, username: `user${id}`, nickname: `用户${id}` })
+    // 拉到就覆盖（刷新缓存）；拉不到则保留已有缓存，没有再兜底占位
+    userCache.set(id, u ?? userCache.get(id) ?? { id, username: `user${id}`, nickname: `用户${id}` })
   })
 }
 
@@ -289,7 +293,7 @@ export async function listConversations(): Promise<Conversation[]> {
     .filter((v) => v.type === 1)
     .map((v) => (v.memberIds ?? []).find((id) => id !== me))
     .filter((id): id is string => id != null)
-  await resolveUsers(peerIds)
+  await resolveUsers(peerIds, true) // 强制刷新，保证列表里的对端昵称/头像与最新一致
   // 拉每个会话的最后一条消息作为预览（后端会话 VO 不含消息正文）
   const previews = await Promise.all(
     vos.map((v) =>
@@ -313,7 +317,7 @@ export async function getConversation(id: string): Promise<Conversation> {
   const me = myId()
   if (vo.type === 1) {
     const peerId = (vo.memberIds ?? []).find((uid) => uid !== me)
-    if (peerId != null) await resolveUsers([peerId])
+    if (peerId != null) await resolveUsers([peerId], true) // 强制刷新，标题/头像取最新对端资料
   }
   return mapConversation(vo)
 }

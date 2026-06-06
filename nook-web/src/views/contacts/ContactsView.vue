@@ -9,12 +9,19 @@ import {
   rejectFriendRequest,
   searchUsers,
   sendFriendRequest,
+  updateFriendRemark,
   type Friend,
   type FriendRequest
 } from '@/api/user'
 import { getOrCreateDirect } from '@/api/im'
 import { usePresenceStore } from '@/stores/presence'
 import { useFriendStore } from '@/stores/friends'
+import NookModal from '@/components/NookModal.vue'
+
+// 好友展示名：有备注用备注，否则用昵称（微信式）
+function displayName(f: Friend): string {
+  return f.remark || f.nickname
+}
 
 const router = useRouter()
 const presence = usePresenceStore()
@@ -33,7 +40,7 @@ const searching = ref(false)
 const grouped = computed(() => {
   const groups: Record<string, Friend[]> = {}
   for (const f of friends.value) {
-    const key = (f.nickname[0] ?? '#').toUpperCase()
+    const key = (displayName(f)[0] ?? '#').toUpperCase()
     ;(groups[key] ??= []).push(f)
   }
   return Object.keys(groups)
@@ -50,6 +57,7 @@ async function refresh(silent = false) {
     const [fs, rs] = await Promise.all([listFriends(), listFriendRequests()])
     friends.value = fs
     requests.value = rs
+    friendStore.syncRemarks(fs) // 同步全局备注表，供聊天列表/聊天室复用
     friendStore.pendingCount = rs.filter((r) => r.status === 0).length // 同步侧栏角标
   } catch {
     /* 轮询失败静默处理 */
@@ -126,6 +134,34 @@ async function onMessage(f: Friend) {
   }
 }
 
+// ───── 好友备注编辑 ─────
+const remarkTarget = ref<Friend | null>(null)
+const remarkDraft = ref('')
+const savingRemark = ref(false)
+
+function openRemark(f: Friend) {
+  remarkTarget.value = f
+  remarkDraft.value = f.remark ?? ''
+}
+
+async function saveRemark() {
+  const target = remarkTarget.value
+  if (!target || savingRemark.value) return
+  const remark = remarkDraft.value.trim()
+  savingRemark.value = true
+  try {
+    await updateFriendRemark(target.userId, remark)
+    target.remark = remark || undefined // 即时反映到列表
+    friendStore.setRemark(target.userId, remark) // 同步全局表（聊天页生效）
+    remarkTarget.value = null
+    ElMessage.success(remark ? '备注已更新' : '已清除备注')
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '保存失败')
+  } finally {
+    savingRemark.value = false
+  }
+}
+
 const statusLabel: Record<number, string> = {
   0: '待处理',
   1: '已接受',
@@ -164,14 +200,21 @@ const statusLabel: Record<number, string> = {
         <div v-for="g in grouped" :key="g.key" class="group">
           <div class="group-key">{{ g.key }}</div>
           <div v-for="f in g.items" :key="f.userId" class="friend-row">
-            <span class="avatar">{{ (f.nickname[0] ?? '?').toUpperCase() }}</span>
+            <span class="avatar">{{ (displayName(f)[0] ?? '?').toUpperCase() }}</span>
             <div class="info">
               <div class="row">
-                <span class="name">{{ f.nickname }}</span>
+                <span class="name">{{ displayName(f) }}</span>
                 <span v-if="presence.isOnline(f.userId)" class="dot" title="在线" />
               </div>
-              <div class="sig">{{ f.signature || `@${f.username}` }}</div>
+              <div class="sig">
+                <template v-if="f.remark">昵称：{{ f.nickname }}</template>
+                <template v-else>{{ f.signature || `@${f.username}` }}</template>
+              </div>
             </div>
+            <button class="row-btn" type="button" title="设置备注" @click.stop="openRemark(f)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
+              备注
+            </button>
             <button class="row-btn" type="button" @click.stop="onMessage(f)">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.5 8.5 0 1 1 21 11.5Z" /></svg>
               发消息
@@ -216,6 +259,31 @@ const statusLabel: Record<number, string> = {
         </div>
       </div>
     </div>
+
+    <!-- 备注编辑弹窗（复用项目自有 NookModal，不用 Element 弹窗） -->
+    <NookModal
+      :model-value="!!remarkTarget"
+      title="设置备注名"
+      :width="400"
+      @update:model-value="(v) => { if (!v) remarkTarget = null }"
+    >
+      <div v-if="remarkTarget" class="remark-form">
+        <p class="remark-hint">为「{{ remarkTarget.nickname }}」设置一个只有你能看到的备注名</p>
+        <input
+          v-model="remarkDraft"
+          class="remark-input"
+          maxlength="64"
+          placeholder="留空则恢复显示昵称"
+          @keyup.enter="saveRemark"
+        />
+      </div>
+      <template #footer>
+        <button class="btn ghost" type="button" @click="remarkTarget = null">取消</button>
+        <button class="btn primary" type="button" :disabled="savingRemark" @click="saveRemark">
+          {{ savingRemark ? '保存中…' : '保存' }}
+        </button>
+      </template>
+    </NookModal>
   </div>
 </template>
 
@@ -473,4 +541,32 @@ html.dark .search-bar input { background: rgba(4, 47, 46, 0.5); }
   transition: background 150ms ease;
 }
 .result-row:hover { background: rgba(20, 184, 166, 0.08); }
+
+/* ───── 备注弹窗 ───── */
+.remark-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.remark-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--nook-text-muted);
+  line-height: 1.5;
+}
+.remark-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--nook-surface-border);
+  background: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 14px;
+  color: var(--nook-text);
+  outline: none;
+  transition: border-color 180ms ease;
+}
+html.dark .remark-input { background: rgba(4, 47, 46, 0.5); }
+.remark-input:focus { border-color: var(--nook-primary); }
 </style>

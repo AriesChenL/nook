@@ -5,10 +5,17 @@ import { listConversations, previewIncoming, type Conversation } from '@/api/im'
 import { chatSocket } from '@/api/ws'
 import NewGroupDialog from '@/components/NewGroupDialog.vue'
 import { usePresenceStore } from '@/stores/presence'
+import { useFriendStore } from '@/stores/friends'
 
 const route = useRoute()
 const router = useRouter()
 const presence = usePresenceStore()
+const friendStore = useFriendStore()
+
+// 单聊会话名优先用好友备注（微信式），群聊 / 无备注回退到会话名
+function convName(c: Conversation): string {
+  return (c.type === 1 ? friendStore.remarkFor(c.peerId) : undefined) || c.name
+}
 
 const conversations = ref<Conversation[]>([])
 const loading = ref(true)
@@ -17,7 +24,7 @@ const keyword = ref('')
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   if (!k) return conversations.value
-  return conversations.value.filter((c) => c.name.toLowerCase().includes(k))
+  return conversations.value.filter((c) => convName(c).toLowerCase().includes(k))
 })
 
 const activeId = computed(() => {
@@ -59,6 +66,7 @@ let offMessage: (() => void) | null = null
 
 onMounted(() => {
   reload()
+  friendStore.loadRemarks() // 拉取好友备注表，用于单聊会话名展示
   offMessage = chatSocket.on('message', onPush)
 })
 onUnmounted(() => offMessage?.())
@@ -109,12 +117,12 @@ async function onGroupCreated(conv: Conversation) {
             <svg v-if="c.type === 2" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
               <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3 19a6 6 0 0 1 12 0M13 19a5 5 0 0 1 8 0" stroke-linecap="round" />
             </svg>
-            <span v-else>{{ c.name[0]?.toUpperCase() }}</span>
+            <span v-else>{{ convName(c)[0]?.toUpperCase() }}</span>
             <span v-if="c.type === 1 && presence.isOnline(c.peerId)" class="av-dot" />
           </span>
           <div class="conv-body">
             <div class="conv-row">
-              <span class="conv-name">{{ c.name }}<span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span></span>
+              <span class="conv-name">{{ convName(c) }}<span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span></span>
               <span class="conv-time">{{ c.lastMessageAt }}</span>
             </div>
             <div class="conv-row">

@@ -22,6 +22,7 @@ import { useAuthStore } from '@/stores/auth'
 import GroupPanel from '@/components/GroupPanel.vue'
 import MessageContent from '@/components/MessageContent.vue'
 import { usePresenceStore } from '@/stores/presence'
+import { useFriendStore } from '@/stores/friends'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,9 +43,14 @@ const showGroupPanel = ref(false)
 const scroller = ref<HTMLDivElement | null>(null)
 
 const presence = usePresenceStore()
+const friendStore = useFriendStore()
 const isGroup = computed(() => conv.value?.type === 2)
 const peerOnline = computed(() => presence.isOnline(conv.value?.peerId))
-const title = computed(() => conv.value?.name ?? `会话 #${conversationId.value}`)
+// 单聊标题优先用好友备注（微信式），其余回退到会话名
+const title = computed(() => {
+  const remark = conv.value?.type === 1 ? friendStore.remarkFor(conv.value?.peerId) : undefined
+  return remark || conv.value?.name || `会话 #${conversationId.value}`
+})
 const subtitle = computed(() => {
   if (conv.value?.type === 2) return `${conv.value.members ?? 0} 位成员`
   return peerOnline.value ? '在线' : '离线'
@@ -246,6 +252,7 @@ let offRecall: (() => void) | null = null
 watch(conversationId, load)
 onMounted(() => {
   load()
+  friendStore.loadRemarks() // 备注表用于单聊标题展示
   offMessage = chatSocket.on('message', onPush)
   offRecall = chatSocket.on('recall', onRecallPush)
 })
