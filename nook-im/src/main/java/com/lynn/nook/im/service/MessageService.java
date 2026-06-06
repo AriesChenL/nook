@@ -27,8 +27,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MessageService {
 
-    /** 消息可撤回的时间窗口：2 分钟。超过返回 MESSAGE_RECALL_EXPIRED。 */
-    public static final Duration RECALL_WINDOW = Duration.ofMinutes(2);
+    /** 消息可撤回的时间窗口：5 分钟。超过返回 MESSAGE_RECALL_EXPIRED。 */
+    public static final Duration RECALL_WINDOW = Duration.ofMinutes(5);
 
     private final MessageMapper messageMapper;
     private final ConversationService conversationService;

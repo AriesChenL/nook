@@ -34,7 +34,7 @@ public enum ResultCode {
     MESSAGE_CONTENT_EMPTY(3003, "消息内容不能为空"),
     MESSAGE_NOT_FOUND(3004, "消息不存在"),
     MESSAGE_RECALL_FORBIDDEN(3005, "只能撤回自己发送的消息"),
-    MESSAGE_RECALL_EXPIRED(3006, "消息已超过可撤回时间"),
+    MESSAGE_RECALL_EXPIRED(3006, "消息发送已超过5分钟，无法撤回"),
     MESSAGE_ALREADY_RECALLED(3007, "消息已撤回"),
 
     CONVERSATION_NOT_GROUP(3008, "该会话不是群聊"),
