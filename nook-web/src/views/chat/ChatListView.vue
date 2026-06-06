@@ -126,7 +126,14 @@ async function onGroupCreated(conv: Conversation) {
           </span>
           <div class="conv-body">
             <div class="conv-row">
-              <span class="conv-name">{{ convName(c) }}<span v-if="convRemark(c)" class="conv-nick">（{{ c.name }}）</span><span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span></span>
+              <span class="conv-name-line">
+                <span class="conv-name">{{ convName(c) }}</span>
+                <span v-if="convRemark(c)" class="nk-alias" :title="`昵称：${c.name}`">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.82A2 2 0 0 0 9.59 3.24H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.59 9.59a2 2 0 0 0 2.82 0l4.59-4.59a2 2 0 0 0 0-2.82Z" /><circle cx="7.5" cy="7.5" r="1.4" fill="currentColor" stroke="none" /></svg>
+                  <span class="nk-alias__name">{{ c.name }}</span>
+                </span>
+                <span v-if="c.type === 2 && c.members" class="conv-count">·{{ c.members }}</span>
+              </span>
               <span class="conv-time">{{ c.lastMessageAt }}</span>
             </div>
             <div class="conv-row">
@@ -307,8 +314,16 @@ html.dark .search input {
 .conv-row + .conv-row {
   margin-top: 2px;
 }
-.conv-name {
+.conv-name-line {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conv-name {
+  flex: 0 1 auto;
+  min-width: 0;
   font-weight: 600;
   font-size: 14px;
   color: var(--nook-text);
@@ -317,13 +332,7 @@ html.dark .search input {
   white-space: nowrap;
 }
 .conv-count {
-  margin-left: 4px;
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--nook-text-muted);
-}
-.conv-nick {
-  margin-left: 4px;
+  flex-shrink: 0;
   font-weight: 400;
   font-size: 12px;
   color: var(--nook-text-muted);
