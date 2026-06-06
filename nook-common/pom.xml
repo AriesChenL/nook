@@ -50,6 +50,17 @@
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
         </dependency>
+
+        <!-- Flyway 数据库迁移：迁移脚本在 db/migration/，各 DB 服务启动时自动执行；
+             多服务并发启动由 Flyway 的迁移锁保证只执行一次。无 DataSource 的服务(网关)自动跳过。 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

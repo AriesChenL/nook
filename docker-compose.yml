@@ -15,7 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - pg-data:/var/lib/postgresql
-      - ./sql:/docker-entrypoint-initdb.d:ro
+      # 数据库 schema 改由 Flyway 在应用启动时管理（迁移脚本在 nook-common/db/migration）。
+      # 不再用 initdb.d（它只在空卷首启时跑一次、不跟踪增量）。
 
   redis:
     image: redis:latest

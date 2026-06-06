@@ -11,6 +11,12 @@ spring:
     password: nook123
     driver-class-name: org.postgresql.Driver
 
+  # Flyway：迁移脚本在 nook-common 的 classpath:db/migration（已有库采纳现状为基线）
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+
   data:
     redis:
       host: localhost
