@@ -363,6 +363,15 @@ html.dark .nav-item.active {
   gap: 8px;
   align-items: center;
 }
+.actions :deep(.theme-switch) {
+  flex: 1;
+  min-width: 0;
+  max-width: 132px;
+}
+.actions .icon-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .icon-btn {
   display: inline-flex;
   align-items: center;

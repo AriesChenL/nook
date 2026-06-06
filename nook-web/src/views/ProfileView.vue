@@ -243,21 +243,40 @@ html.dark .field textarea {
   justify-content: flex-end;
 }
 .btn {
-  height: 34px;
-  padding: 0 16px;
-  border-radius: 10px;
-  border: none;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 22px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
+/* 对齐侧边栏「选中菜单项」的视觉语言：品牌微渐变 + 深青绿文字 + 细描边 + 柔光 */
 .btn.primary {
-  background: var(--nook-gradient-teal);
-  color: #fff;
+  background: var(--nook-gradient-wash);
+  color: var(--nook-primary-deep);
+  box-shadow: inset 0 0 0 1px var(--nook-surface-border),
+    0 8px 22px -14px rgba(20, 184, 166, 0.7);
 }
-.btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--nook-primary),
+    0 12px 26px -14px rgba(20, 184, 166, 0.8);
+}
+.btn.primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+  box-shadow: inset 0 0 0 1px var(--nook-primary),
+    0 5px 14px -12px rgba(20, 184, 166, 0.7);
+}
+html.dark .btn.primary {
+  color: var(--nook-primary-soft);
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .kv {
   display: flex;
