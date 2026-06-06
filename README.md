@@ -71,7 +71,7 @@
 - RabbitMQ（默认关闭，多实例广播时开启）
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
-- AI：agentscope-harness 1.1.0-RC2（HarnessAgent）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
+- AI：agentscope-harness 2.0.0-RC1（HarnessAgent）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
 
 **前端（nook-web）**
 - Vue 3.5 · Vite · TypeScript · Pinia · Vue Router
@@ -104,7 +104,7 @@
 - **用户私有 Agent**：每个用户可建多个属于自己的 AI Agent，像好友一样有长期记忆；建/列/改/删，全程 owner 校验
 - **共享长期记忆**：同一 owner 的多个 Agent 经 `SharedMemoryStore` 命名空间装饰器共享 `MEMORY.md`/`memory`，人格（sysPrompt）与对话会话各自独立
 - **只读环境 100% 入 PG**：自实现 `PgBaseStore`（workspace）+ `StoreBackedSession`（对话快照），不依赖任何本地文件/SQLite
-- **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 同步对话（`/ai/agents/{id}/chat`，`HarnessAgent.call().block()`）
+- **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 流式对话（`/ai/agents/{id}/chat/stream`，SSE 推 `HarnessAgent.streamEvents` 的 `TEXT_BLOCK_DELTA` 增量；另留同步 `/chat` 兜底）
 - **模型**：DeepSeek `deepseek-v4-flash`；API Key 走 `nook-ai/.env`（启动加载，不入库）
 
 ### 🚪 网关（nook-gateway）
@@ -234,7 +234,8 @@ pnpm dev        # http://localhost:5173
 | POST / GET | `/ai/agents` | 建 Agent `{name,persona?,avatarUrl?,modelName?}` / 我的 Agent 列表 |
 | GET / PUT / DELETE | `/ai/agents/{id}` | 详情 / 改 name·persona·avatar / 删 |
 | POST / GET | `/ai/agents/{id}/sessions` | 建对话线程 `{title?}` / 线程列表 |
-| POST | `/ai/agents/{id}/chat` | 同步对话 `{sessionId?,content}` → `{sessionId,reply}`（缺 sessionId 自动建默认会话） |
+| POST | `/ai/agents/{id}/chat/stream` | **流式对话**（SSE）`{sessionId?,content}` → 事件 `delta{t}` / `done{sessionId,text}` / `error{message}`（缺 sessionId 自动建默认会话） |
+| POST | `/ai/agents/{id}/chat` | 同步对话 `{sessionId?,content}` → `{sessionId,reply}`（兜底，非流式） |
 
 ---
 
@@ -303,9 +304,10 @@ nook/
 
 ## 路线图
 
-- [x] **nook-ai**：agentscope-harness 用户私有 Agent + 共享长期记忆 + 100% 入 PG + DeepSeek（同步对话）
+- [x] **nook-ai**：agentscope-harness 用户私有 Agent + 共享长期记忆 + 100% 入 PG + DeepSeek
+- [x] **AI 流式对话**：SSE 推 `streamEvents` 的 `TEXT_BLOCK_DELTA` 增量，前端逐字渲染
 - [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
-- [ ] **AI 增强**：SSE 流式对话、会话历史接口、memory_search 全文检索
+- [ ] **AI 增强**：会话历史接口、memory_search 全文检索
 - [ ] **会话列表去 N+1**：`ConversationVO` 增加 `lastMessageContent`
 - [ ] **在线状态快照**：新连上的用户主动拉取"当前在线好友"
 - [x] **可观测**：业务服务接入 actuator 健康端点
