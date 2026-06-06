@@ -309,3 +309,9 @@ nook/
 - [x] **可观测**：业务服务接入 actuator 健康端点
 - [ ] **JWT 密钥统一**到 Nacos 共享配置
 - [ ] **离线推送**（APNs / FCM）
+
+---
+
+## License
+
+本项目基于 [MIT License](LICENSE) 开源。
