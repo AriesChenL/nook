@@ -425,6 +425,7 @@ onUnmounted(() => {
     </header>
 
     <div ref="scroller" class="messages" :aria-busy="loading || undefined" role="log" aria-live="polite">
+      <div class="msg-flow">
       <el-skeleton v-if="loading" :rows="4" animated />
       <template v-else>
         <template v-for="m in grouped" :key="m.id">
@@ -482,9 +483,11 @@ onUnmounted(() => {
           </template>
         </template>
       </template>
+      </div>
     </div>
 
     <footer class="composer">
+      <div class="composer-inner">
       <!-- 粘贴的待发图片预览：卡片式，点发送才上传，可逐个移除 -->
       <div v-if="pendingImages.length" class="paste-tray">
         <div class="paste-tray__head">
@@ -544,6 +547,7 @@ onUnmounted(() => {
           <span v-if="!sending">发送</span>
           <span v-else class="sending-dot"><i /><i /><i /></span>
         </button>
+      </div>
       </div>
     </footer>
 
@@ -730,7 +734,13 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 24px 20px;
+  padding: var(--space-4) var(--space-6) var(--space-5);
+}
+/* 居中阅读列：宽度=面板 92%、上限 1400px —— 两侧只留窄边，超宽屏才封顶 */
+.msg-flow {
+  width: 92%;
+  max-width: 1400px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -979,14 +989,20 @@ html.dark .read-trigger:hover:not(:disabled) {
 
 /* ───── Composer ───── */
 .composer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   padding: 12px 24px 16px;
   border-top: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: var(--glass-std);
+  -webkit-backdrop-filter: var(--glass-std);
+}
+/* 与消息流同宽居中，两者对齐成一条阅读列 */
+.composer-inner {
+  width: 92%;
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .composer-row {
   display: flex;

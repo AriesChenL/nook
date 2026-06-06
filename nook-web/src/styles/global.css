@@ -56,6 +56,36 @@
   --dur: 220ms;
   --dur-slow: 420ms;
 
+  /* ── Mint+ 地基：排版层级（标题用 display，正文用 sans）── */
+  --text-xs: 11.5px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --lh-tight: 1.2;
+  --lh-snug: 1.45;
+  --lh-normal: 1.6;
+  --tracking-tight: -0.02em; /* 大标题收紧 */
+  --tracking-snug: -0.01em;
+  --tracking-wide: 0.04em;   /* display 小字 / 标签 */
+
+  /* ── Mint+ 地基：间距尺度（替代各页硬编码 px，统一节奏）── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ── Mint+ 地基：玻璃模糊三档（收敛此前 12/14/16/24 多种写法）── */
+  --glass-soft: blur(8px) saturate(140%);
+  --glass-std: blur(16px) saturate(150%);
+  --glass-strong: blur(24px) saturate(160%);
+
   --el-color-primary: #14b8a6;
   --el-color-primary-light-3: #2dd4bf;
   --el-color-primary-light-5: #5eead4;
@@ -121,6 +151,7 @@ body {
 body {
   font-family: var(--nook-font-sans);
   color: var(--nook-text);
+  line-height: var(--lh-normal);
   background:
     radial-gradient(78% 60% at 8% -8%, rgba(94, 234, 212, 0.28), transparent 60%),
     radial-gradient(70% 55% at 100% 8%, rgba(251, 146, 60, 0.16), transparent 58%),
@@ -159,8 +190,10 @@ html.dark body::after {
 /* 标题统一显示字体 */
 h1, h2, h3 {
   font-family: var(--nook-font-display);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--lh-tight);
 }
+h1 { letter-spacing: var(--tracking-tight); }
 
 /* 文本选区 */
 ::selection {

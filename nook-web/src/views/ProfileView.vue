@@ -79,36 +79,38 @@ async function onSave() {
         </div>
       </section>
 
-      <section class="card">
-        <h3>基本信息</h3>
-        <div class="field">
-          <label for="pf-nickname">昵称</label>
-          <input id="pf-nickname" v-model="form.nickname" maxlength="32" />
-        </div>
-        <div class="field">
-          <label for="pf-email">邮箱</label>
-          <input id="pf-email" v-model="form.email" type="email" maxlength="128" placeholder="可选" />
-        </div>
-        <div class="field">
-          <label for="pf-phone">手机号</label>
-          <input id="pf-phone" v-model="form.phone" maxlength="32" placeholder="可选" />
-        </div>
-        <div class="actions">
-          <button class="btn primary" :disabled="saving" @click="onSave">
-            {{ saving ? '保存中…' : '保存' }}
-          </button>
-        </div>
-      </section>
+      <div class="cards-grid">
+        <section class="card">
+          <h3>基本信息</h3>
+          <div class="field">
+            <label for="pf-nickname">昵称</label>
+            <input id="pf-nickname" v-model="form.nickname" maxlength="32" />
+          </div>
+          <div class="field">
+            <label for="pf-email">邮箱</label>
+            <input id="pf-email" v-model="form.email" type="email" maxlength="128" placeholder="可选" />
+          </div>
+          <div class="field">
+            <label for="pf-phone">手机号</label>
+            <input id="pf-phone" v-model="form.phone" maxlength="32" placeholder="可选" />
+          </div>
+          <div class="actions">
+            <button class="btn primary" :disabled="saving" @click="onSave">
+              {{ saving ? '保存中…' : '保存' }}
+            </button>
+          </div>
+        </section>
 
-      <section class="card">
-        <h3>账号</h3>
-        <div class="kv">
-          <span class="k">用户名</span><span class="v">{{ auth.user?.username }}</span>
-        </div>
-        <div class="kv">
-          <span class="k">密码</span><span class="v">已设置 · <a class="link">修改</a></span>
-        </div>
-      </section>
+        <section class="card">
+          <h3>账号</h3>
+          <div class="kv">
+            <span class="k">用户名</span><span class="v">{{ auth.user?.username }}</span>
+          </div>
+          <div class="kv">
+            <span class="k">密码</span><span class="v">已设置 · <a class="link">修改</a></span>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </template>
@@ -138,20 +140,31 @@ async function onSave() {
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 28px 32px;
+  padding: var(--space-5) var(--space-7) var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 720px;
+  gap: var(--space-4);
+  max-width: 960px;
   width: 100%;
   margin: 0 auto;
 }
+/* 下方两张卡片宽屏并排，窄屏堆叠 */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .cards-grid { grid-template-columns: 1fr; }
+}
 
 .card {
-  padding: 18px 20px;
-  border-radius: 16px;
+  padding: var(--space-5) var(--space-5);
+  border-radius: var(--r-md);
   border: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
+  box-shadow: var(--shadow-sm);
 }
 .card h3 {
   margin: 0 0 14px;
@@ -164,7 +177,11 @@ async function onSave() {
 .hero {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  background:
+    var(--nook-gradient-wash),
+    var(--nook-surface);
 }
 .avatar-big {
   width: 76px;

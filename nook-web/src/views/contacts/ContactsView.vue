@@ -37,16 +37,10 @@ const keyword = ref('')
 const searchResults = ref<Friend[]>([])
 const searching = ref(false)
 
-const grouped = computed(() => {
-  const groups: Record<string, Friend[]> = {}
-  for (const f of friends.value) {
-    const key = (displayName(f)[0] ?? '#').toUpperCase()
-    ;(groups[key] ??= []).push(f)
-  }
-  return Object.keys(groups)
-    .sort()
-    .map((k) => ({ key: k, items: groups[k] }))
-})
+// 扁平按展示名排序：用一张密集卡片网格铺满宽屏，比每字母一行更好用
+const sortedFriends = computed(() =>
+  [...friends.value].sort((a, b) => displayName(a).localeCompare(displayName(b), 'zh-Hans-CN'))
+)
 
 const pendingRequests = computed(() => requests.value.filter((r) => r.status === 0))
 
@@ -197,35 +191,32 @@ const statusLabel: Record<number, string> = {
       <!-- 好友列表 -->
       <div v-else-if="tab === 'friends'" class="friends">
         <div v-if="!friends.length" class="empty">还没有好友，去「添加」找找看</div>
-        <div v-for="g in grouped" :key="g.key" class="group">
-          <div class="group-key">{{ g.key }}</div>
-          <div v-for="f in g.items" :key="f.userId" class="friend-row">
-            <span class="avatar">{{ (displayName(f)[0] ?? '?').toUpperCase() }}</span>
-            <div class="info">
-              <div class="row">
+        <div v-else class="group-grid">
+            <div v-for="f in sortedFriends" :key="f.userId" class="friend-card">
+              <span class="avatar">{{ (displayName(f)[0] ?? '?').toUpperCase() }}<span v-if="presence.isOnline(f.userId)" class="av-dot" title="在线" /></span>
+              <div class="info">
                 <span class="name">{{ displayName(f) }}</span>
-                <span v-if="presence.isOnline(f.userId)" class="dot" title="在线" />
+                <div class="sig">
+                  <template v-if="f.remark">昵称：{{ f.nickname }}</template>
+                  <template v-else>{{ f.signature || `@${f.username}` }}</template>
+                </div>
               </div>
-              <div class="sig">
-                <template v-if="f.remark">昵称：{{ f.nickname }}</template>
-                <template v-else>{{ f.signature || `@${f.username}` }}</template>
+              <div class="card-actions">
+                <button class="icon-act" type="button" title="设置备注" @click.stop="openRemark(f)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
+                </button>
+                <button class="icon-act accent" type="button" title="发消息" @click.stop="onMessage(f)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.5 8.5 0 1 1 21 11.5Z" /></svg>
+                </button>
               </div>
             </div>
-            <button class="row-btn" type="button" title="设置备注" @click.stop="openRemark(f)">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
-              备注
-            </button>
-            <button class="row-btn" type="button" @click.stop="onMessage(f)">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.5 8.5 0 1 1 21 11.5Z" /></svg>
-              发消息
-            </button>
-          </div>
         </div>
       </div>
 
       <!-- 好友申请 -->
       <div v-else-if="tab === 'requests'" class="requests">
         <div v-if="!requests.length" class="empty">暂无好友申请</div>
+        <div class="req-grid">
         <div v-for="r in requests" :key="r.id" class="req-card">
           <span class="avatar">{{ (r.fromNickname[0] ?? '?').toUpperCase() }}</span>
           <div class="info">
@@ -238,6 +229,7 @@ const statusLabel: Record<number, string> = {
             <button class="btn ghost" @click="onReject(r)">拒绝</button>
           </div>
         </div>
+        </div>
       </div>
 
       <!-- 添加好友 -->
@@ -249,13 +241,15 @@ const statusLabel: Record<number, string> = {
         <div v-if="!searchResults.length && keyword" class="empty">
           {{ searching ? '搜索中…' : '没有匹配结果' }}
         </div>
-        <div v-for="u in searchResults" :key="u.userId" class="result-row">
-          <span class="avatar">{{ (u.nickname[0] ?? '?').toUpperCase() }}</span>
-          <div class="info">
-            <div class="name">{{ u.nickname }}</div>
-            <div class="sig">@{{ u.username }} · {{ u.signature || '暂无签名' }}</div>
+        <div class="result-grid">
+          <div v-for="u in searchResults" :key="u.userId" class="result-card">
+            <span class="avatar">{{ (u.nickname[0] ?? '?').toUpperCase() }}</span>
+            <div class="info">
+              <div class="name">{{ u.nickname }}</div>
+              <div class="sig">@{{ u.username }} · {{ u.signature || '暂无签名' }}</div>
+            </div>
+            <button class="btn primary" @click="onAdd(u)">添加</button>
           </div>
-          <button class="btn primary" @click="onAdd(u)">添加</button>
         </div>
       </div>
     </div>
@@ -354,15 +348,16 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 28px 32px;
+  padding: var(--space-5) var(--space-7) var(--space-8);
 }
 .body::-webkit-scrollbar { width: 6px; }
 .body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
-/* 宽屏下把列表收进阅读列，左对齐与标题对齐，避免整行铺满、按钮被甩到最右 */
+/* 内容居中，宽屏用卡片网格铺开，不再左钉 720 列留大片右白 */
 .friends,
 .requests,
 .add {
-  max-width: 720px;
+  max-width: 1180px;
+  margin: 0 auto;
 }
 
 .empty {
@@ -372,102 +367,136 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
   font-size: 14px;
 }
 
-.group + .group { margin-top: 16px; }
+.group + .group { margin-top: var(--space-5); }
 .group-key {
   font-family: var(--nook-font-display);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--nook-text-muted);
-  padding: 8px 12px 6px;
+  letter-spacing: var(--tracking-wide);
+  color: var(--nook-primary-deep);
+  padding: var(--space-2) var(--space-1) var(--space-2);
 }
-.friend-row {
+html.dark .group-key { color: var(--nook-primary-soft); }
+
+/* 好友卡片网格：宽屏自动多列铺开 */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-3);
+}
+.friend-card {
   display: flex;
   align-items: center;
-  width: 100%;
-  gap: 14px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  transition: background 150ms ease;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
 }
-.friend-row:hover {
-  background: rgba(20, 184, 166, 0.08);
+.friend-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(20, 184, 166, 0.45);
 }
 .avatar {
+  position: relative;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
   background: var(--nook-gradient-brand);
   color: #fff;
   font-weight: 700;
   font-family: var(--nook-font-display);
 }
+.av-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #10b981;
+  border: 2px solid var(--nook-surface);
+}
 .info {
   flex: 1;
   min-width: 0;
-}
-.row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 .name {
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: var(--text-md);
   color: var(--nook-text);
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sig, .msg {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--nook-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.row-btn {
+.card-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.icon-act {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--nook-surface-border);
   background: transparent;
-  color: var(--nook-text);
-  font: inherit;
-  font-size: 12.5px;
+  color: var(--nook-text-muted);
   cursor: pointer;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
 }
-.row-btn:hover {
+.icon-act:hover {
   background: rgba(20, 184, 166, 0.1);
   border-color: var(--nook-primary);
   color: var(--nook-primary-deep);
 }
+.icon-act.accent:hover {
+  background: var(--nook-gradient-teal);
+  border-color: transparent;
+  color: #fff;
+}
+html.dark .icon-act:hover { color: var(--nook-primary-soft); }
 
+/* 申请 / 搜索结果卡片网格 */
+.req-grid,
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-3);
+}
 .req-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px;
-  margin-bottom: 10px;
-  border-radius: 14px;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--r-md);
   border: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
+.req-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .req-card .info {
   display: flex;
   flex-direction: column;
@@ -532,15 +561,18 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
 html.dark .search-bar input { background: rgba(4, 47, 46, 0.5); }
 .search-bar input:focus { border-color: var(--nook-primary); }
 
-.result-row {
+.result-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  transition: background 150ms ease;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--nook-surface-border);
+  background: var(--nook-surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
-.result-row:hover { background: rgba(20, 184, 166, 0.08); }
+.result-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 
 /* ───── 备注弹窗 ───── */
 .remark-form {

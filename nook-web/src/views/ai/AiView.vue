@@ -653,7 +653,7 @@ onMounted(() => loadAgents())
 }
 .preset:hover::before { opacity: 1; transform: none; }
 
-.turns { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 820px; margin: 0 auto; }
+.turns { display: flex; flex-direction: column; gap: var(--space-5); width: 92%; max-width: 1100px; margin: 0 auto; }
 .turn { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; animation: nook-rise var(--dur-slow) var(--ease-out) both; }
 .turn.user { align-items: flex-end; }
 .role-tag { font-family: var(--nook-font-display); font-size: 11.5px; letter-spacing: 0.04em; color: var(--nook-text-muted); padding: 0 4px; }
@@ -685,14 +685,16 @@ onMounted(() => loadAgents())
   padding: 12px 24px 18px;
   border-top: 1px solid var(--nook-surface-border);
   background: var(--nook-surface);
+  backdrop-filter: var(--glass-std);
+  -webkit-backdrop-filter: var(--glass-std);
 }
-/* 输入栏内容约束到与对话同宽的居中阅读列，超宽屏不再拉满 */
+/* 输入栏与对话同宽（92%·上限 1100），超宽屏两侧只留窄边 */
 .composer-inner {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  width: 100%;
-  max-width: 820px;
+  width: 92%;
+  max-width: 1100px;
   margin: 0 auto;
 }
 .composer textarea {
