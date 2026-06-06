@@ -25,6 +25,13 @@ spring:
       database: 0
       timeout: 3s
 
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: nook
+    password: nook123
+    virtual-host: /
+
   cloud:
     nacos:
       discovery:
@@ -39,11 +46,11 @@ mybatis-flex:
   global-config:
     print-banner: false
 
-# RocketMQ：默认关闭，单机开发不需要 broker；多实例部署改为 true。
+# 消息分发：开启后走 RabbitMQ 广播 exchange，支持多实例；关闭则进程内本地直推（单实例）。
 nook:
   im:
     mq:
-      enabled: false
+      enabled: true
   # 对象存储（RustFS / S3 兼容）：预签名直传 + 公开读下载
   storage:
     endpoint: http://localhost:9000          # 浏览器可达地址，作为 presigned URL 的 host
@@ -53,12 +60,6 @@ nook:
     public-base-url: http://localhost:9000/nook-im   # 下载/预览前缀（bucket 公开读）
     presign-expire-seconds: 600              # 预签名上传 URL 有效期
     max-file-size: 209715200                 # 单文件上限 200MB
-
-rocketmq:
-  name-server: localhost:9876
-  producer:
-    group: nook-im-producer
-    send-message-timeout: 3000
 
 management:
   endpoints:

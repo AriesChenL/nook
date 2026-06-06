@@ -38,7 +38,6 @@
         <agentscope.version>2.0.0-RC1</agentscope.version>
         <mybatis-flex.version>1.10.9</mybatis-flex.version>
         <postgresql.version>42.7.4</postgresql.version>
-        <rocketmq-spring.version>2.3.3</rocketmq-spring.version>
         <spring-cloud.version>2025.0.2</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
         <hutool.version>5.8.32</hutool.version>
@@ -121,12 +120,6 @@
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.rocketmq</groupId>
-                <artifactId>rocketmq-spring-boot-starter</artifactId>
-                <version>${rocketmq-spring.version}</version>
             </dependency>
 
             <dependency>

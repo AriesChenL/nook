@@ -48,27 +48,19 @@ services:
       - nacos-data:/home/nacos/data
       - nacos-logs:/home/nacos/logs
 
-  rocketmq-namesrv:
-    image: apache/rocketmq:latest
-    container_name: nook-rmq-namesrv
+  # RabbitMQ：IM 事件广播（新消息 / 撤回 / 在线状态），management 镜像自带 WebUI
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: nook-rabbitmq
     restart: unless-stopped
-    command: sh mqnamesrv
-    ports:
-      - "9876:9876"
-
-  rocketmq-broker:
-    image: apache/rocketmq:latest
-    container_name: nook-rmq-broker
-    restart: unless-stopped
-    depends_on:
-      - rocketmq-namesrv
-    command: sh mqbroker -n nook-rmq-namesrv:9876 --enable-proxy
     environment:
-      NAMESRV_ADDR: nook-rmq-namesrv:9876
+      RABBITMQ_DEFAULT_USER: nook
+      RABBITMQ_DEFAULT_PASS: nook123      # 与 nook-im application.yml 的 spring.rabbitmq 保持一致
     ports:
-      - "10909:10909"
-      - "10911:10911"
-      - "18081:8081"  # gRPC proxy（避开 nook-auth 的 8081）
+      - "5672:5672"     # AMQP（应用连接）
+      - "15672:15672"   # 管理控制台 WebUI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
 
   # RustFS：S3 兼容对象存储，IM 文件/图片/音视频直传
   rustfs:
@@ -91,3 +83,4 @@ volumes:
   nacos-data:
   nacos-logs:
   rustfs-data:
+  rabbitmq-data:

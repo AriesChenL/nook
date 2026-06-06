@@ -9,15 +9,15 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-class RocketMqPresenceEventConsumerTest {
+class RabbitPresenceEventConsumerTest {
 
     private MessagePushService pushService;
-    private RocketMqPresenceEventConsumer consumer;
+    private RabbitPresenceEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
         pushService = mock(MessagePushService.class);
-        consumer = new RocketMqPresenceEventConsumer(pushService);
+        consumer = new RabbitPresenceEventConsumer(pushService);
     }
 
     @Test

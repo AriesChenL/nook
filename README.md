@@ -38,13 +38,13 @@
            │             └─────┼───────┘
            ▼             ▼     ▼       ▼
     ┌──────────────────────────────────────────────┐
-    │  PostgreSQL · Redis · Nacos · RocketMQ(可选)   │
+    │  PostgreSQL · Redis · Nacos · RabbitMQ(可选)   │
     └──────────────────────────────────────────────┘
 ```
 
 - **服务注册/配置**：Nacos
 - **服务间调用**：OpenFeign（`nook-im` → `nook-user` 聚合成员资料、好友列表）
-- **实时推送**：WebSocket（单机本地直推；多实例时经 RocketMQ **BROADCASTING** 广播保证一致）
+- **实时推送**：WebSocket（单机本地直推；多实例时经 RabbitMQ **广播 exchange** 分发保证一致）
 
 | 模块 | 职责 |
 |---|---|
@@ -66,7 +66,7 @@
 - 注册/配置中心 Nacos 3.x · 网关 Spring Cloud Gateway (WebFlux)
 - PostgreSQL · MyBatis-Flex 1.10.9
 - Redis（token 黑名单 / 在线状态 / 单端在线索引）
-- RocketMQ（默认关闭，多实例广播时开启）
+- RabbitMQ（默认关闭，多实例广播时开启）
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
 - AI：agentscope-harness 1.1.0-RC2（HarnessAgent）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
@@ -114,7 +114,7 @@
 
 ### 前置
 - **JDK 25**（`JAVA_HOME` 须指向 JDK 25；机器默认可能是 21，要显式覆盖）
-- Docker（起 PostgreSQL / Redis / Nacos / RocketMQ）
+- Docker（起 PostgreSQL / Redis / Nacos / RabbitMQ）
 - Node.js + pnpm（前端）
 
 ### 1. 起基础设施
@@ -129,7 +129,7 @@ nook.bat down     :: 停止
 nook.bat reset    :: 清库重来（down -v + 删数据）
 ```
 
-底层即 `docker-compose.yml`，包含 PostgreSQL / Redis / Nacos / RocketMQ / RustFS（对象存储）。
+底层即 `docker-compose.yml`，包含 PostgreSQL / Redis / Nacos / RabbitMQ / RustFS（对象存储）。
 
 > **AI 密钥**：跑 `nook-ai` 前在 `nook-ai/.env` 填 `DEEPSEEK_API_KEY=sk-xxx`（模板见 `nook-ai/.env.example`，`.env` 已 gitignore，启动经 `spring.config.import` 自动加载）。
 
@@ -179,7 +179,7 @@ pnpm dev        # http://localhost:5173
 | Redis | 6379 | 密码 `redis123` |
 | Nacos | 8848 | |
 | RustFS | 9000 / 9001 | S3 API / 控制台（rustfsadmin / rustfssecret） |
-| RocketMQ namesrv / broker | 9876 / 10911 | 默认未启用 |
+| RabbitMQ | 5672 / 15672 | AMQP / 管理台（nook / nook123） |
 
 ---
 
@@ -254,7 +254,7 @@ pnpm dev        # http://localhost:5173
 ## 配置说明
 
 - **JWT 密钥**：当前各服务 yml 写死同一个 secret，**生产务必改并统一到 Nacos 共享配置**。
-- **多实例广播**：默认 `nook.im.mq.enabled=false`（单机本地直推）；多实例部署设 `true`，新消息/撤回/在线状态走 RocketMQ BROADCASTING。
+- **多实例广播**：`nook.im.mq.enabled=true`（默认）时新消息/撤回/在线状态走 RabbitMQ 广播 exchange（每实例一条匿名队列，各收全量）；单机若不想起 broker 可设 `false` 走进程内本地直推。
 - **Nacos 3.x**：需配 `NACOS_AUTH_TOKEN`（base64）等三件套，即使关认证也要给。
 - **PostgreSQL 18+**：数据卷挂载到 `/var/lib/postgresql/data`。
 - **MyBatis-Flex**：每个 ORM 模块需单独加 `spring-boot-starter-jdbc`，启动类加 `@MapperScan`。
