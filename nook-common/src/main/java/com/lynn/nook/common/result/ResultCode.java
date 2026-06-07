@@ -52,7 +52,13 @@ public enum ResultCode {
     AI_AGENT_FORBIDDEN(4002, "无权操作该 AI 智能体"),
     AI_CHAT_SESSION_NOT_FOUND(4003, "AI 对话会话不存在"),
     AI_MODEL_ERROR(4004, "AI 模型调用失败"),
-    AI_AGENT_NAME_BLANK(4005, "AI 智能体名称不能为空");
+    AI_AGENT_NAME_BLANK(4005, "AI 智能体名称不能为空"),
+
+    PAY_PRODUCT_NOT_FOUND(5001, "商品或套餐不存在"),
+    PAY_STRIPE_ERROR(5002, "支付渠道调用失败"),
+    PAY_WEBHOOK_SIGNATURE_INVALID(5003, "Webhook 签名校验失败"),
+    PAY_NOT_CONFIGURED(5004, "支付功能未正确配置"),
+    PAY_SUBSCRIPTION_NOT_FOUND(5005, "未找到有效订阅");
 
     private final int code;
     private final String message;

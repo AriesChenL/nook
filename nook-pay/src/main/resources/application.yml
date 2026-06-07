@@ -1,0 +1,66 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: nook-pay
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nook
+    username: nook
+    password: nook123
+    driver-class-name: org.postgresql.Driver
+
+  # Flyway：迁移脚本在 nook-common 的 classpath:db/migration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: redis123
+      database: 0
+      timeout: 3s
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yml
+        import-check:
+          enabled: false
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+
+# Stripe 配置：生产环境务必把密钥放 Nacos 配置中心，不要提交进代码库
+nook:
+  stripe:
+    api-key: ${STRIPE_API_KEY:}            # 推荐受限密钥 rk_ 开头
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}  # whsec_ 开头
+    success-url: http://localhost:5173/pay/success?session_id={CHECKOUT_SESSION_ID}
+    cancel-url: http://localhost:5173/pay/cancel
+    portal-return-url: http://localhost:5173/account/billing
+    prices:
+      # 套餐/商品编码 -> Stripe Price id（test 模式，由 stripe-cli 创建）
+      pro_monthly: price_1Tfe8L4Ebn0s1rOwDvw2L0yi   # 订阅：月度会员 $9.99/月
+      credits_100: price_1Tfe8O4Ebn0s1rOwOQcWVuKX   # 一次性：100 点数 $4.99
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.lynn.nook: DEBUG

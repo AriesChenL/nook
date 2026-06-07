@@ -56,6 +56,10 @@ spring:
               uri: lb://nook-ai
               predicates:
                 - Path=/ai/**
+            - id: pay
+              uri: lb://nook-pay
+              predicates:
+                - Path=/pay/**
 
 nook:
   jwt:
@@ -67,6 +71,7 @@ nook:
       - /auth/register
       - /auth/login
       - /actuator/**
+      - /pay/webhook/**   # Stripe 回调无 JWT，由 Stripe 签名校验来源
 
 management:
   endpoints:

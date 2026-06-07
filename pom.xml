@@ -25,6 +25,7 @@
         <module>nook-user</module>
         <module>nook-im</module>
         <module>nook-ai</module>
+        <module>nook-pay</module>
     </modules>
 
     <properties>
@@ -42,6 +43,7 @@
         <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
         <hutool.version>5.8.32</hutool.version>
         <aws-sdk.version>2.28.16</aws-sdk.version>
+        <stripe.version>29.2.0</stripe.version>
     </properties>
 
     <dependencyManagement>
@@ -126,6 +128,13 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
+            </dependency>
+
+            <!-- Stripe 官方 Java SDK：支付/订阅/Webhook -->
+            <dependency>
+                <groupId>com.stripe</groupId>
+                <artifactId>stripe-java</artifactId>
+                <version>${stripe.version}</version>
             </dependency>
 
             <dependency>
