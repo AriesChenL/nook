@@ -1,17 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Nook">
   <title>Nook</title>
+  <!-- Doorway「负空间门廊」—— 珊瑚色烘焙版（静态资源无法跟随配色变量） -->
   <defs>
-    <linearGradient id="nookBg" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0F766E"/>
-      <stop offset="55%" stop-color="#14B8A6"/>
-      <stop offset="100%" stop-color="#FB923C"/>
-    </linearGradient>
-    <linearGradient id="nookSpark" x1="22" y1="22" x2="42" y2="42" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FBBF24"/>
-      <stop offset="100%" stop-color="#FB923C"/>
+    <linearGradient id="nookTile" x1="32" y1="0" x2="32" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="oklch(0.69 0.15 36)"/>
+      <stop offset="100%" stop-color="oklch(0.61 0.16 30)"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="url(#nookBg)"/>
-  <path d="M24 16 H46 Q52 16 52 22 V36 Q52 42 46 42 H36 L30 48 V42 H24 Q18 42 18 36 V22 Q18 16 24 16 Z" fill="#FFFFFF"/>
-  <path d="M32 22.5 L34.4 28.6 L40.5 31 L34.4 33.4 L32 39.5 L29.6 33.4 L23.5 31 L29.6 28.6 Z" fill="url(#nookSpark)"/>
+  <rect width="64" height="64" rx="17" fill="url(#nookTile)"/>
+  <path d="M20 48 V30 a12 12 0 0 1 24 0 V48 Z" fill="oklch(0.99 0.01 45)"/>
+  <path d="M27 48 V31 a5 5 0 0 1 10 0 V48 Z" fill="oklch(0.64 0.15 32)"/>
+  <circle cx="32" cy="38" r="3.1" fill="oklch(0.77 0.11 72)"/>
 </svg>

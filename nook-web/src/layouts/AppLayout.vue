@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { confirm } from '@/composables/useConfirm'
 import { useAuthStore } from '@/stores/auth'
 import { usePresenceStore } from '@/stores/presence'
@@ -9,7 +9,8 @@ import { useFriendStore } from '@/stores/friends'
 import { logout } from '@/api/auth'
 import { listOnlineFriends } from '@/api/im'
 import { chatSocket } from '@/api/ws'
-import ThemeToggle from '@/components/ThemeToggle.vue'
+import DarkModeToggle from '@/components/DarkModeToggle.vue'
+import NookLogo from '@/components/NookLogo.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -91,7 +92,7 @@ async function onLogout() {
   chatSocket.disconnect()
   presence.reset()
   auth.clear()
-  ElMessage.success('已退出')
+  toast.success('已退出')
   router.replace({ name: 'login' })
 }
 </script>
@@ -100,7 +101,7 @@ async function onLogout() {
   <div class="app">
     <aside class="sidebar">
       <div class="brand" @click="router.push('/chat')">
-        <img src="/logo.svg" alt="Nook" width="32" height="32" />
+        <NookLogo :size="32" />
         <span class="brand-name">Nook</span>
       </div>
 
@@ -150,8 +151,8 @@ async function onLogout() {
           </div>
         </div>
         <div class="actions">
-          <ThemeToggle />
-          <button class="icon-btn" type="button" aria-label="退出登录" title="退出登录" @click="onLogout">
+          <DarkModeToggle />
+          <button class="icon-btn logout" type="button" aria-label="退出登录" title="退出登录" @click="onLogout">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
@@ -179,12 +180,9 @@ async function onLogout() {
   min-height: 100vh;
   min-height: 100dvh;
   background:
-    radial-gradient(70% 50% at 0% 0%, rgba(20, 184, 166, 0.12), transparent 70%),
-    radial-gradient(60% 50% at 100% 100%, rgba(251, 146, 60, 0.1), transparent 70%),
-    var(--nook-bg, #f0fdfa);
-}
-html.dark .app {
-  --nook-bg: #042f2e;
+    radial-gradient(70% 50% at 0% 0%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 70%),
+    radial-gradient(60% 50% at 100% 100%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%),
+    var(--bg);
 }
 
 .sidebar {
@@ -208,7 +206,7 @@ html.dark .app {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
 }
 html.dark .sidebar::before {
-  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.3), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 30%, transparent), transparent);
 }
 
 .brand {
@@ -219,12 +217,10 @@ html.dark .sidebar::before {
   cursor: pointer;
   animation: nook-rise var(--dur-slow) var(--ease-out) both;
 }
-.brand img {
-  border-radius: var(--r-xs);
-  box-shadow: 0 6px 14px -4px rgba(15, 118, 110, 0.4);
+.brand .nook-logo {
   transition: transform var(--dur) var(--ease-spring);
 }
-.brand:hover img {
+.brand:hover .nook-logo {
   transform: rotate(-8deg) scale(1.06);
 }
 .brand-name {
@@ -261,14 +257,14 @@ html.dark .sidebar::before {
   animation: nook-rise var(--dur-slow) var(--ease-out) both;
 }
 .nav-item:hover {
-  background: rgba(20, 184, 166, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
   color: var(--nook-text);
   transform: translateX(2px);
 }
 .nav-item.active {
   background: var(--nook-gradient-wash);
   color: var(--nook-primary-deep);
-  box-shadow: inset 0 0 0 1px var(--nook-surface-border), 0 8px 22px -14px rgba(20, 184, 166, 0.7);
+  box-shadow: inset 0 0 0 1px var(--nook-surface-border), 0 8px 22px -14px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 /* 选中态左侧光条 */
 .nav-item.active::before {
@@ -281,7 +277,7 @@ html.dark .sidebar::before {
   height: 22px;
   border-radius: 0 4px 4px 0;
   background: var(--nook-gradient-brand);
-  box-shadow: 0 0 12px rgba(20, 184, 166, 0.7);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 html.dark .nav-item.active {
   color: var(--nook-primary-soft);
@@ -316,8 +312,9 @@ html.dark .nav-item.active {
   gap: 10px;
   padding: 12px;
   border-radius: var(--r-md);
-  background: var(--nook-surface-sunken);
-  border: 1px solid var(--nook-hairline);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: var(--inset-top);
   animation: nook-rise var(--dur-slow) var(--ease-out) both;
   animation-delay: 320ms;
 }
@@ -373,12 +370,8 @@ html.dark .nav-item.active {
   gap: 8px;
   align-items: center;
 }
-.actions :deep(.theme-switch) {
-  flex: 1;
-  min-width: 0;
-  max-width: 132px;
-}
-.actions .icon-btn {
+/* 退出按钮靠右（设计稿 logout margin-left:auto） */
+.actions .logout {
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -389,18 +382,23 @@ html.dark .nav-item.active {
   width: 36px;
   height: 36px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  color: var(--nook-text);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
   cursor: pointer;
-  transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  box-shadow: var(--inset-top);
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease),
+    background var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.icon-btn:hover {
-  border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+/* 退出 = 危险态（设计稿 variant=danger）：hover 才染红，克制 */
+.icon-btn.logout:hover {
+  border-color: transparent;
+  color: var(--danger);
+  background: var(--danger-soft);
   transform: translateY(-1px);
+}
+.icon-btn.logout:active {
+  transform: translateY(0.5px) scale(0.96);
 }
 
 .content {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import ThemeToggle from './ThemeToggle.vue'
+import DarkModeToggle from './DarkModeToggle.vue'
+import NookLogo from './NookLogo.vue'
 
 defineProps<{
   title: string
@@ -17,13 +18,13 @@ defineProps<{
     </div>
 
     <div class="theme-slot">
-      <ThemeToggle />
+      <DarkModeToggle />
     </div>
 
     <section class="auth-card" role="region" aria-labelledby="auth-title">
       <header class="auth-head">
         <div class="brand">
-          <img src="/logo.svg" alt="" class="brand-logo" width="28" height="28" />
+          <NookLogo :size="28" class="brand-logo" />
           <span class="brand-name">Nook</span>
         </div>
         <h1 id="auth-title" class="auth-title">{{ title }}</h1>
@@ -68,11 +69,11 @@ defineProps<{
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: radial-gradient(120% 80% at 50% -20%, #ccfbf1 0%, #f0fdfa 45%, #fff7ed 100%);
+  background: radial-gradient(120% 80% at 50% -20%, var(--primary-tint) 0%, var(--bg) 50%, var(--surface-2) 100%);
 }
 
 html.dark .auth-bg {
-  background: radial-gradient(120% 80% at 50% -20%, #0f3a36 0%, #042f2e 55%, #021410 100%);
+  background: radial-gradient(120% 80% at 50% -20%, var(--surface-2) 0%, var(--bg) 55%, var(--surface-sunken) 100%);
 }
 
 .orb {
@@ -87,14 +88,14 @@ html.dark .auth-bg {
   height: 380px;
   left: -80px;
   top: -60px;
-  background: #14b8a6;
+  background: var(--primary);
 }
 .orb-b {
   width: 320px;
   height: 320px;
   right: -60px;
   top: 28%;
-  background: #fb923c;
+  background: var(--accent);
   animation-delay: -6s;
 }
 .orb-c {
@@ -102,7 +103,7 @@ html.dark .auth-bg {
   height: 280px;
   left: 32%;
   bottom: -90px;
-  background: #fbbf24;
+  background: var(--accent);
   animation-delay: -12s;
 }
 html.dark .orb {
@@ -113,15 +114,15 @@ html.dark .orb {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(20, 184, 166, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(20, 184, 166, 0.08) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(60% 60% at 50% 40%, #000 30%, transparent 80%);
 }
 html.dark .grid {
   background-image:
-    linear-gradient(rgba(94, 234, 212, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(94, 234, 212, 0.08) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px);
 }
 
 @keyframes drift {
@@ -134,12 +135,10 @@ html.dark .grid {
   width: min(420px, 100%);
   padding: 38px 32px 28px;
   border-radius: var(--r-xl);
-  background: var(--nook-surface-raised);
-  border: 1px solid var(--nook-surface-border);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  box-shadow: var(--shadow-lg);
-  color: var(--nook-text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--elev-float), var(--inset-top);
+  color: var(--ink);
   overflow: hidden;
   animation: card-in var(--dur-slow) var(--ease-spring) both;
 }
@@ -152,7 +151,7 @@ html.dark .grid {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
 }
 html.dark .auth-card::before {
-  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.4), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 40%, transparent), transparent);
 }
 @keyframes card-in {
   from { opacity: 0; transform: translateY(22px) scale(0.97); }
@@ -176,13 +175,8 @@ html.dark .auth-card::before {
   gap: 10px;
   padding: 6px 14px 6px 6px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.14), rgba(251, 146, 60, 0.14));
+  background: var(--primary-soft);
   margin-bottom: 18px;
-}
-.brand-logo {
-  display: block;
-  border-radius: 8px;
-  box-shadow: 0 4px 10px -2px rgba(15, 118, 110, 0.35);
 }
 .brand-name {
   font-family: var(--nook-font-display);

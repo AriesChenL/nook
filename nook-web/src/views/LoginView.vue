@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { login } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import AuthShell from '@/components/AuthShell.vue'
@@ -34,7 +34,7 @@ async function onSubmit() {
       username: data.username,
       nickname: data.nickname
     })
-    ElMessage.success(`欢迎回来，${data.nickname || data.username}`)
+    toast.welcome('继续你的对话与 AI 工作流', `欢迎回来，${data.nickname || data.username}`)
     const redirect = (route.query.redirect as string) || '/home'
     router.replace(redirect)
   } catch (e: any) {
@@ -70,13 +70,12 @@ async function onSubmit() {
           autocomplete="current-password"
           show-password
           size="large"
-          @keyup.enter="onSubmit"
         />
       </div>
 
       <div class="row-between">
         <el-checkbox v-model="form.remember">7 天内自动登录</el-checkbox>
-        <a class="link" tabindex="0" @click="ElMessage.info('请联系管理员重置密码')">忘记密码？</a>
+        <a class="link" tabindex="0" @click="toast.info('请联系管理员重置密码')">忘记密码？</a>
       </div>
 
       <p v-if="submitError" class="form-error" role="alert">{{ submitError }}</p>
@@ -106,15 +105,11 @@ async function onSubmit() {
 .form-error {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
+  border-radius: var(--r-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
-}
-html.dark .form-error {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fecaca;
 }
 
 .loading-dot {

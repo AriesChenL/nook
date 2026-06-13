@@ -83,6 +83,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* 遮罩（设计稿 .scrim）：阴影色半透明 + 轻模糊 */
 .nm-overlay {
   position: fixed;
   inset: 0;
@@ -91,73 +92,62 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 20, 18, 0.42);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: hsl(var(--sh-color) / 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+/* 弹窗（设计稿 .modal）：不透明暖白面 + 浮起阴影 + 顶部高光 */
 .nm-panel {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 86vh;
-  border-radius: var(--r-xl);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface-raised);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  box-shadow: var(--shadow-lg);
+  max-height: calc(100vh - 48px);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-float), var(--inset-top);
   overflow: hidden;
-}
-/* 顶部高光线 */
-.nm-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-}
-:global(html.dark) .nm-panel::before {
-  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.4), transparent);
 }
 
 .nm-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 22px 6px;
+  padding: 20px 22px 14px;
 }
 .nm-head :deep(h3),
 .nm-head h3 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 18px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--nook-text);
+  color: var(--ink);
 }
 .nm-x {
   flex-shrink: 0;
   display: inline-flex;
   width: 32px;
   height: 32px;
+  margin: -4px -4px 0 0;
   align-items: center;
   justify-content: center;
   border-radius: var(--r-xs);
   border: none;
   background: transparent;
-  color: var(--nook-text-muted);
+  color: var(--ink-2);
   cursor: pointer;
-  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .nm-x:hover {
-  background: rgba(20, 184, 166, 0.1);
-  color: var(--nook-text);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
 }
 
 .nm-body {
-  padding: 14px 22px 4px;
+  padding: 4px 22px 8px;
   overflow-y: auto;
 }
 .nm-foot {
@@ -166,6 +156,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 10px;
   padding: 16px 22px 20px;
+  margin-top: 8px;
 }
 
 /* 入场：遮罩淡入 + 卡片弹起 */

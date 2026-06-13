@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { listFriends, type Friend } from '@/api/user'
 import { createGroup, type Conversation } from '@/api/im'
 
@@ -60,7 +60,7 @@ function close() {
 async function submit() {
   const ids = [...selected.value]
   if (!ids.length) {
-    ElMessage.warning('至少选择 1 位好友')
+    toast.warning('至少选择 1 位好友')
     return
   }
   const fallback = selectedFriends.value
@@ -71,11 +71,11 @@ async function submit() {
   submitting.value = true
   try {
     const conv = await createGroup(name, ids)
-    ElMessage.success('群聊已创建')
+    toast.success('群聊已创建')
     emit('created', conv)
     emit('update:modelValue', false)
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '建群失败')
+    toast.error(e?.message ?? '建群失败')
   } finally {
     submitting.value = false
   }
@@ -144,6 +144,7 @@ async function submit() {
 </template>
 
 <style scoped>
+/* 遮罩 + 弹窗（设计稿 .scrim / .modal）*/
 .overlay {
   position: fixed;
   inset: 0;
@@ -151,94 +152,84 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(4px);
+  padding: 24px;
+  background: hsl(var(--sh-color) / 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .panel {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 440px;
-  max-height: 80vh;
-  border-radius: var(--r-xl);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface-raised);
-  backdrop-filter: var(--glass-strong);
-  -webkit-backdrop-filter: var(--glass-strong);
-  box-shadow: var(--shadow-lg);
+  max-width: 460px;
+  max-height: calc(100vh - 48px);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-float), var(--inset-top);
   overflow: hidden;
-}
-/* 顶部高光线，与 NookModal 一致的玻璃边缘 */
-.panel::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-}
-:global(html.dark) .panel::before {
-  background: linear-gradient(90deg, transparent, rgba(94, 234, 212, 0.4), transparent);
 }
 .panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px 12px;
+  padding: 20px 22px 14px;
 }
 .panel-head h3 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--nook-text);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
 }
 .x {
   display: inline-flex;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
   align-items: center;
   justify-content: center;
   border-radius: var(--r-xs);
   border: none;
   background: transparent;
-  color: var(--nook-text-muted);
+  color: var(--ink-2);
   cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .x:hover {
-  background: rgba(20, 184, 166, 0.1);
-  color: var(--nook-text);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
 }
 
 .field {
-  padding: 0 20px 10px;
+  padding: 0 22px 10px;
 }
 .field input {
   width: 100%;
-  height: 40px;
+  height: 42px;
   padding: 0 14px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
   font: inherit;
-  font-size: 14px;
-  color: var(--nook-text);
+  font-size: var(--t-base);
+  color: var(--ink);
   outline: none;
-  transition: border-color 180ms ease;
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-html.dark .field input {
-  background: rgba(4, 47, 46, 0.5);
-}
+.field input::placeholder { color: var(--ink-3); }
 .field input:focus {
-  border-color: var(--nook-primary);
+  border-color: var(--primary);
+  box-shadow: var(--ring), inset 0 1px 3px hsl(var(--sh-color) / 0.05);
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 20px 10px;
+  padding: 0 22px 10px;
 }
 .chip {
   display: inline-flex;
@@ -246,32 +237,29 @@ html.dark .field input {
   gap: 4px;
   padding: 4px 10px;
   border-radius: var(--r-pill);
-  background: rgba(20, 184, 166, 0.12);
-  color: var(--nook-primary-deep);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
   font-size: 12.5px;
   cursor: pointer;
-}
-html.dark .chip {
-  color: var(--nook-primary-soft);
 }
 
 .list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 12px;
+  padding: 4px 14px;
   min-height: 120px;
 }
 .list::-webkit-scrollbar {
   width: 5px;
 }
 .list::-webkit-scrollbar-thumb {
-  background: rgba(20, 184, 166, 0.25);
+  background: hsl(var(--sh-color) / 0.2);
   border-radius: 3px;
 }
 .empty {
   padding: 30px 0;
   text-align: center;
-  color: var(--nook-text-muted);
+  color: var(--ink-3);
   font-size: 13px;
 }
 .row {
@@ -281,19 +269,20 @@ html.dark .chip {
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   background: transparent;
   cursor: pointer;
   text-align: left;
   font: inherit;
-  transition: background 150ms ease;
+  transition: background var(--dur) var(--ease);
 }
 .row:hover {
-  background: rgba(20, 184, 166, 0.08);
+  background: var(--surface-2);
 }
 .row.on {
-  background: rgba(20, 184, 166, 0.1);
+  background: var(--primary-soft);
 }
+/* 勾选框（设计稿 .check）*/
 .check {
   flex-shrink: 0;
   display: inline-flex;
@@ -301,14 +290,16 @@ html.dark .chip {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
-  border: 1.8px solid var(--nook-surface-border);
-  color: #fff;
-  transition: background 150ms ease, border-color 150ms ease;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: inset 0 1px 2px hsl(var(--sh-color) / 0.1);
+  color: var(--on-primary);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .check.on {
-  background: var(--nook-primary);
-  border-color: var(--nook-primary);
+  background: var(--grad-primary);
+  border-color: transparent;
 }
 .avatar {
   flex-shrink: 0;
@@ -317,56 +308,66 @@ html.dark .chip {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: var(--r-sm);
-  background: var(--nook-gradient-brand);
-  color: #fff;
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
   font-weight: 700;
-  font-family: var(--nook-font-display);
+  font-family: var(--font-display);
   font-size: 14px;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .name {
-  font-size: 14px;
+  font-size: var(--t-base);
   font-weight: 500;
-  color: var(--nook-text);
+  color: var(--ink);
 }
 
 .panel-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--nook-surface-border);
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
 }
 .count {
   font-size: 12.5px;
-  color: var(--nook-text-muted);
+  color: var(--ink-3);
 }
 .acts {
   display: flex;
   gap: 8px;
 }
 .btn {
-  height: 36px;
+  height: 40px;
   padding: 0 18px;
   border-radius: var(--r-sm);
-  border: none;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: var(--t-base);
+  font-weight: 600;
   cursor: pointer;
-  transition: filter 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .btn.primary {
-  background: var(--nook-gradient-teal);
-  color: #fff;
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 .btn.primary:hover:not(:disabled) {
-  filter: brightness(1.06);
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 .btn.ghost {
-  background: transparent;
-  border: 1px solid var(--nook-surface-border);
-  color: var(--nook-text);
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  box-shadow: var(--elev-1), var(--inset-top);
+}
+.btn.ghost:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary-strong);
 }
 .btn:disabled {
   opacity: 0.5;

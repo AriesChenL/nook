@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import {
   acceptFriendRequest,
   listFriendRequests,
@@ -95,9 +95,9 @@ async function onAccept(r: FriendRequest) {
     await acceptFriendRequest(r.id)
     r.status = 1
     friendStore.pendingCount = pendingRequests.value.length // 角标即时 -1
-    ElMessage.success(`已接受 ${r.fromNickname} 的好友申请`)
+    toast.success(`已接受 ${r.fromNickname} 的好友申请`)
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '操作失败')
+    toast.error(e?.message ?? '操作失败')
   }
 }
 async function onReject(r: FriendRequest) {
@@ -106,16 +106,16 @@ async function onReject(r: FriendRequest) {
     r.status = 2
     friendStore.pendingCount = pendingRequests.value.length // 角标即时 -1
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '操作失败')
+    toast.error(e?.message ?? '操作失败')
   }
 }
 
 async function onAdd(u: Friend) {
   try {
     await sendFriendRequest(u.userId)
-    ElMessage.success(`已向 ${u.nickname} 发送好友申请`)
+    toast.success(`已向 ${u.nickname} 发送好友申请`)
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '申请发送失败')
+    toast.error(e?.message ?? '申请发送失败')
   }
 }
 
@@ -124,7 +124,7 @@ async function onMessage(f: Friend) {
     const conv = await getOrCreateDirect(f.userId)
     router.push({ name: 'chat-room', params: { id: conv.id } })
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '无法发起会话')
+    toast.error(e?.message ?? '无法发起会话')
   }
 }
 
@@ -148,9 +148,9 @@ async function saveRemark() {
     target.remark = remark || undefined // 即时反映到列表
     friendStore.setRemark(target.userId, remark) // 同步全局表（聊天页生效）
     remarkTarget.value = null
-    ElMessage.success(remark ? '备注已更新' : '已清除备注')
+    toast.success(remark ? '备注已更新' : '已清除备注')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '保存失败')
+    toast.error(e?.message ?? '保存失败')
   } finally {
     savingRemark.value = false
   }
@@ -291,58 +291,62 @@ const statusLabel: Record<number, string> = {
 }
 .head {
   padding: 20px 28px 12px;
-  border-bottom: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .head h2 {
   margin: 0 0 14px;
-  font-family: var(--nook-font-display);
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
   font-weight: 700;
-  color: var(--nook-text);
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
+/* 分段控件（设计稿 .segmented）*/
 .tabs {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 12px;
-  background: rgba(20, 184, 166, 0.06);
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 2px hsl(var(--sh-color) / 0.08);
 }
 .tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
+  padding: 7px 16px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--r-xs);
   background: transparent;
-  color: var(--nook-text-muted);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: var(--t-sm);
+  font-weight: 600;
   cursor: pointer;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.tab:hover { color: var(--nook-text); }
+.tab:hover { color: var(--ink); }
 .tab.active {
-  background: var(--nook-surface);
-  color: var(--nook-primary-deep);
-  box-shadow: 0 2px 6px -2px rgba(20, 184, 166, 0.3);
+  background: var(--surface);
+  color: var(--primary-strong);
+  box-shadow: var(--elev-1), var(--inset-top);
 }
-html.dark .tab.active { color: var(--nook-primary-soft); }
 .tab-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: var(--nook-accent-deep);
+  background: var(--grad-accent);
   color: #fff;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--elev-1);
 }
 
 .body {
@@ -351,7 +355,7 @@ html.dark .tab.active { color: var(--nook-primary-soft); }
   padding: var(--space-5) var(--space-7) var(--space-8);
 }
 .body::-webkit-scrollbar { width: 6px; }
-.body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+.body::-webkit-scrollbar-thumb { background: hsl(var(--sh-color) / 0.2); border-radius: 3px; }
 /* 内容居中，宽屏用卡片网格铺开，不再左钉 720 列留大片右白 */
 .friends,
 .requests,
@@ -390,16 +394,15 @@ html.dark .group-key { color: var(--nook-primary-soft); }
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--r-md);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out),
-    border-color var(--dur) var(--ease-out);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-1), var(--inset-top);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .friend-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: rgba(20, 184, 166, 0.45);
+  box-shadow: var(--elev-2), var(--inset-top);
+  border-color: var(--primary);
 }
 .avatar {
   position: relative;
@@ -409,11 +412,12 @@ html.dark .group-key { color: var(--nook-primary-soft); }
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: var(--r-sm);
-  background: var(--nook-gradient-brand);
-  color: #fff;
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
   font-weight: 700;
-  font-family: var(--nook-font-display);
+  font-family: var(--font-display);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .av-dot {
   position: absolute;
@@ -422,8 +426,8 @@ html.dark .group-key { color: var(--nook-primary-soft); }
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #10b981;
-  border: 2px solid var(--nook-surface);
+  background: var(--success);
+  border: 2px solid var(--surface);
 }
 .info {
   flex: 1;
@@ -467,7 +471,7 @@ html.dark .group-key { color: var(--nook-primary-soft); }
     border-color var(--dur) var(--ease-out);
 }
 .icon-act:hover {
-  background: rgba(20, 184, 166, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
   border-color: var(--nook-primary);
   color: var(--nook-primary-deep);
 }
@@ -491,12 +495,12 @@ html.dark .icon-act:hover { color: var(--nook-primary-soft); }
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: var(--r-md);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-1), var(--inset-top);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.req-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.req-card:hover { transform: translateY(-2px); box-shadow: var(--elev-2), var(--inset-top); }
 .req-card .info {
   display: flex;
   flex-direction: column;
@@ -504,40 +508,44 @@ html.dark .icon-act:hover { color: var(--nook-primary-soft); }
 }
 .req-card .ts {
   font-size: 11.5px;
-  color: var(--nook-text-muted);
+  color: var(--ink-3);
 }
-.st-1 { color: #10b981; }
-.st-2 { color: #ef4444; }
-.st-3 { color: var(--nook-text-muted); }
+.st-1 { color: var(--success); }
+.st-2 { color: var(--danger); }
+.st-3 { color: var(--ink-3); }
 .req-actions {
   display: flex;
   gap: 8px;
 }
 
+/* 按钮（设计稿 .btn）：主 = 渐变拟物，次 = 暖白描边 */
 .btn {
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: none;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: var(--t-sm);
+  font-weight: 600;
   cursor: pointer;
-  transition: filter 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .btn.primary {
-  background: var(--nook-gradient-teal);
-  color: #fff;
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-.btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.04); transform: translateY(-1px); box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.32); }
 .btn.ghost {
-  background: transparent;
-  border: 1px solid var(--nook-surface-border);
-  color: var(--nook-text);
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  box-shadow: var(--elev-1), var(--inset-top);
 }
 .btn.ghost:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -548,18 +556,20 @@ html.dark .icon-act:hover { color: var(--nook-primary-soft); }
 }
 .search-bar input {
   flex: 1;
-  height: 38px;
+  height: 42px;
   padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.6);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
   font: inherit;
-  font-size: 14px;
-  color: var(--nook-text);
+  font-size: var(--t-base);
+  color: var(--ink);
   outline: none;
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-html.dark .search-bar input { background: rgba(4, 47, 46, 0.5); }
-.search-bar input:focus { border-color: var(--nook-primary); }
+.search-bar input::placeholder { color: var(--ink-3); }
+.search-bar input:focus { border-color: var(--primary); box-shadow: var(--ring), inset 0 1px 3px hsl(var(--sh-color) / 0.05); }
 
 .result-card {
   display: flex;

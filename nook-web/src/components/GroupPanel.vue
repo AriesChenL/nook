@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { confirm } from '@/composables/useConfirm'
 import { listFriends, type Friend } from '@/api/user'
 import {
@@ -61,7 +61,7 @@ async function loadMembers() {
   try {
     members.value = await listMembers(props.conv.id)
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '加载成员失败')
+    toast.error(e?.message ?? '加载成员失败')
   } finally {
     loading.value = false
   }
@@ -92,10 +92,10 @@ async function onSaveName() {
   savingName.value = true
   try {
     await updateGroup(props.conv.id, { name })
-    ElMessage.success('群名已更新')
+    toast.success('群名已更新')
     emit('refresh')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '更新失败')
+    toast.error(e?.message ?? '更新失败')
   } finally {
     savingName.value = false
   }
@@ -109,7 +109,7 @@ async function onKick(m: Member) {
     members.value = members.value.filter((x) => x.userId !== m.userId)
     emit('refresh')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '移出失败')
+    toast.error(e?.message ?? '移出失败')
   }
 }
 
@@ -119,9 +119,9 @@ async function onToggleAdmin(m: Member) {
     await setMemberRole(props.conv.id, m.userId, next)
     m.role = next
     members.value = [...members.value].sort((a, b) => b.role - a.role)
-    ElMessage.success(next === ROLE.ADMIN ? '已设为管理员' : '已取消管理员')
+    toast.success(next === ROLE.ADMIN ? '已设为管理员' : '已取消管理员')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '操作失败')
+    toast.error(e?.message ?? '操作失败')
   }
 }
 
@@ -130,27 +130,27 @@ async function onTransfer(m: Member) {
   if (!ok) return
   try {
     await transferOwner(props.conv.id, m.userId)
-    ElMessage.success('群主已转让')
+    toast.success('群主已转让')
     emit('refresh')
     await loadMembers()
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '转让失败')
+    toast.error(e?.message ?? '转让失败')
   }
 }
 
 async function onLeave() {
   if (isOwner.value) {
-    ElMessage.warning('群主需先转让群主才能退群')
+    toast.warning('群主需先转让群主才能退群')
     return
   }
   const ok = await confirm({ title: '退群', message: '确定退出该群聊？', confirmText: '退群', danger: true })
   if (!ok) return
   try {
     await leaveGroup(props.conv.id)
-    ElMessage.success('已退出群聊')
+    toast.success('已退出群聊')
     emit('left')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '退群失败')
+    toast.error(e?.message ?? '退群失败')
   }
 }
 
@@ -181,12 +181,12 @@ async function onConfirmAdd() {
   adding.value = true
   try {
     await addMembers(props.conv.id, ids)
-    ElMessage.success(`已添加 ${ids.length} 位成员`)
+    toast.success(`已添加 ${ids.length} 位成员`)
     view.value = 'members'
     emit('refresh')
     await loadMembers()
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '添加失败')
+    toast.error(e?.message ?? '添加失败')
   } finally {
     adding.value = false
   }
@@ -299,8 +299,9 @@ async function onConfirmAdd() {
   z-index: 2000;
   display: flex;
   justify-content: flex-end;
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(3px);
+  background: hsl(var(--sh-color) / 0.32);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .drawer {
   display: flex;
@@ -308,11 +309,9 @@ async function onConfirmAdd() {
   width: 380px;
   max-width: 88vw;
   height: 100%;
-  border-left: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: var(--glass-strong);
-  -webkit-backdrop-filter: var(--glass-strong);
-  box-shadow: var(--shadow-lg);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-float), var(--inset-top);
   animation: drawer-in var(--dur-slow) var(--ease-out) both;
 }
 @keyframes drawer-in {
@@ -349,7 +348,7 @@ async function onConfirmAdd() {
 }
 .back:hover,
 .x:hover {
-  background: rgba(20, 184, 166, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
   color: var(--nook-text);
 }
 
@@ -362,7 +361,7 @@ async function onConfirmAdd() {
   width: 5px;
 }
 .d-body::-webkit-scrollbar-thumb {
-  background: rgba(20, 184, 166, 0.25);
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
   border-radius: 3px;
 }
 
@@ -437,13 +436,13 @@ html.dark .name-row input {
   text-align: left;
   font: inherit;
 }
-.m-row:hover { background: rgba(20, 184, 166, 0.06); }
+.m-row:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
 .pick-row {
   cursor: pointer;
   transition: background 150ms ease;
 }
 .pick-row:hover {
-  background: rgba(20, 184, 166, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 .avatar {
   flex-shrink: 0;
@@ -475,7 +474,7 @@ html.dark .name-row input {
   font-size: 10.5px;
   font-weight: 600;
   color: var(--nook-text-muted);
-  background: rgba(20, 184, 166, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
   padding: 1px 5px;
   border-radius: 5px;
 }
@@ -483,13 +482,13 @@ html.dark .name-row input {
   font-size: 10.5px;
   font-weight: 600;
   color: var(--nook-primary-deep);
-  background: rgba(20, 184, 166, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   padding: 1px 6px;
   border-radius: 5px;
 }
 .role.owner {
   color: #b45309;
-  background: rgba(251, 146, 60, 0.16);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 html.dark .role {
   color: var(--nook-primary-soft);
@@ -512,7 +511,7 @@ html.dark .role {
   transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 .op:hover {
-  background: rgba(20, 184, 166, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
   color: var(--nook-primary-deep);
   border-color: var(--nook-primary);
 }

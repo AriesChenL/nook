@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import NookModal from '@/components/NookModal.vue'
 import { confirm } from '@/composables/useConfirm'
 import {
@@ -68,7 +68,7 @@ async function loadAgents(selectId?: string) {
       currentSessionId.value = null
     }
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '加载 Agent 失败')
+    toast.error(e?.message ?? '加载 Agent 失败')
   } finally {
     loadingAgents.value = false
   }
@@ -81,7 +81,7 @@ async function selectAgent(id: string) {
     sessions.value = await listSessions(id)
     currentSessionId.value = sessions.value.length ? sessions.value[0].id : null
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '加载会话失败')
+    toast.error(e?.message ?? '加载会话失败')
     sessions.value = []
     currentSessionId.value = null
   }
@@ -136,13 +136,13 @@ async function ask(prompt: string) {
       onError: (msg) => {
         failed = true
         bucket[aiIndex].content = `⚠ 出错了：${msg}`
-        ElMessage.error('AI 请求失败')
+        toast.error('AI 请求失败')
       }
     })
     if (!failed && !bucket[aiIndex].content) bucket[aiIndex].content = '（无回复）'
   } catch (e: any) {
     bucket[aiIndex].content = `⚠ 出错了：${e?.message ?? '未知错误'}`
-    ElMessage.error('AI 请求失败')
+    toast.error('AI 请求失败')
   } finally {
     sending.value = false
     scrollBottom()
@@ -189,7 +189,7 @@ function openEdit(a: Agent) {
 
 async function saveAgent() {
   if (!form.name.trim()) {
-    ElMessage.warning('请填写 Agent 名称')
+    toast.warning('请填写 Agent 名称')
     return
   }
   saving.value = true
@@ -201,7 +201,7 @@ async function saveAgent() {
         avatarUrl: form.avatarUrl.trim() || undefined,
         modelName: form.modelName.trim() || undefined
       })
-      ElMessage.success('已创建')
+      toast.success('已创建')
       dialogVisible.value = false
       await loadAgents(a.id)
     } else {
@@ -212,11 +212,11 @@ async function saveAgent() {
       })
       const idx = agents.value.findIndex((x) => x.id === a.id)
       if (idx >= 0) agents.value[idx] = a
-      ElMessage.success('已保存')
+      toast.success('已保存')
       dialogVisible.value = false
     }
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '保存失败')
+    toast.error(e?.message ?? '保存失败')
   } finally {
     saving.value = false
   }
@@ -232,11 +232,11 @@ async function removeAgent(a: Agent) {
   if (!ok) return
   try {
     await deleteAgent(a.id)
-    ElMessage.success('已删除')
+    toast.success('已删除')
     const nextId = agents.value.find((x) => x.id !== a.id)?.id
     await loadAgents(nextId)
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '删除失败')
+    toast.error(e?.message ?? '删除失败')
   }
 }
 
@@ -287,7 +287,7 @@ onMounted(() => loadAgents())
     <section class="chat">
       <!-- 无 Agent -->
       <div v-if="!currentAgent" class="empty-stage">
-        <img src="/logo.svg" alt="" width="56" height="56" />
+        <NookLogo :size="56" />
         <h3>创建你的第一个 AI 伙伴</h3>
         <p>每个 Agent 像好友一样拥有长期记忆，同一账号下的多个 Agent 共享对你的了解</p>
         <button class="primary-btn" @click="openCreate">＋ 新建 Agent</button>
@@ -310,7 +310,7 @@ onMounted(() => loadAgents())
         <div ref="scroller" class="chat-body">
           <div v-if="!turns.length" class="welcome">
             <div class="hero">
-              <img src="/logo.svg" alt="" width="48" height="48" />
+              <NookLogo :size="48" />
               <h3>和 {{ currentAgent.name }} 聊点什么</h3>
               <p>它会记住你说过的重要事情</p>
             </div>
@@ -335,19 +335,26 @@ onMounted(() => loadAgents())
 
         <footer class="composer">
           <div class="composer-inner">
-            <textarea
-              ref="composerEl"
-              v-model="draft"
-              rows="1"
-              placeholder="说点什么，Enter 发送 · Shift+Enter 换行"
-              :disabled="sending"
-              @keydown="onKeydown"
-            />
-            <button class="send-btn" :disabled="!draft.trim() || sending" @click="onSubmit">
-              <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-              <span v-else class="typing"><i /><i /><i /></span>
-              <span>{{ sending ? '思考中…' : '发送' }}</span>
-            </button>
+            <!-- 一体式输入条：输入区 + 发送按钮包在同一个圆角框里 -->
+            <div class="composer-box">
+              <textarea
+                ref="composerEl"
+                v-model="draft"
+                rows="1"
+                placeholder="说点什么，Enter 发送 · Shift+Enter 换行"
+                :disabled="sending"
+                @keydown="onKeydown"
+              />
+              <button
+                class="composer-send"
+                :class="{ loading: sending }"
+                :disabled="!draft.trim() || sending"
+                aria-label="发送"
+                @click="onSubmit"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+              </button>
+            </div>
           </div>
         </footer>
       </template>
@@ -395,18 +402,19 @@ onMounted(() => loadAgents())
 <style scoped>
 .ai {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 268px 1fr;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
 }
+@media (max-width: 1040px) { .ai { grid-template-columns: 240px 1fr; } }
 
 /* ───── 左侧 Agent rail ───── */
 .rail {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
   min-height: 0;
 }
 .rail-head {
@@ -414,29 +422,32 @@ onMounted(() => loadAgents())
   align-items: center;
   justify-content: space-between;
   padding: 16px 16px 12px;
-  border-bottom: 1px solid var(--nook-surface-border);
+  border-bottom: 1px solid var(--line);
 }
 .rail-head h2 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
   font-weight: 700;
-  color: var(--nook-text);
+  color: var(--ink);
 }
+/* ＋ 新建：实心图标按钮（设计稿 .icon-btn.solid）*/
 .round-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-xs);
   border: none;
-  background: var(--nook-gradient-brand);
-  color: #fff;
+  background: var(--grad-primary);
+  color: var(--on-primary);
   cursor: pointer;
-  transition: filter 160ms ease;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.round-btn:hover { filter: brightness(1.08); }
+.round-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.28); }
+.round-btn:active { transform: translateY(0.5px) scale(0.96); }
 
 .rail-body {
   flex: 1;
@@ -456,19 +467,20 @@ onMounted(() => loadAgents())
 .agent-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 9px 10px;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 160ms ease, border-color 160ms ease;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.agent-item:hover { background: rgba(20, 184, 166, 0.08); }
+.agent-item:hover { background: var(--surface-2); }
 .agent-item.active {
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(251, 146, 60, 0.12));
-  border-color: rgba(20, 184, 166, 0.3);
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--elev-1), var(--inset-top);
 }
 .a-avatar {
   flex-shrink: 0;
@@ -477,12 +489,13 @@ onMounted(() => loadAgents())
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 11px;
-  background: var(--nook-gradient-teal);
-  color: #fff;
-  font-family: var(--nook-font-display);
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   overflow: hidden;
 }
 .a-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -494,16 +507,16 @@ onMounted(() => loadAgents())
   line-height: 1.3;
 }
 .a-name {
-  font-size: 14px;
+  font-size: var(--t-base);
   font-weight: 600;
-  color: var(--nook-text);
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .a-sub {
-  font-size: 12px;
-  color: var(--nook-text-muted);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -525,8 +538,8 @@ onMounted(() => loadAgents())
   color: var(--nook-text-muted);
   cursor: pointer;
 }
-.a-ops i:hover { background: rgba(0, 0, 0, 0.06); color: var(--nook-text); }
-.a-ops i.danger:hover { color: #ef4444; }
+.a-ops i:hover { background: var(--surface-2); color: var(--ink); }
+.a-ops i.danger:hover { background: var(--danger-soft); color: var(--danger); }
 
 /* ───── 右侧对话 ───── */
 .chat {
@@ -546,40 +559,43 @@ onMounted(() => loadAgents())
   padding: 40px;
   text-align: center;
 }
-.empty-stage img { border-radius: 16px; box-shadow: 0 20px 40px -16px rgba(15, 118, 110, 0.45); margin-bottom: 4px; }
+.empty-stage :deep(.nook-logo) { margin-bottom: 4px; }
 .empty-stage h3 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 22px;
-  background: linear-gradient(135deg, #0f766e, #fb923c);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
-.empty-stage p { margin: 0; max-width: 380px; color: var(--nook-text-muted); font-size: 13.5px; line-height: 1.6; }
+.empty-stage p { margin: 0; max-width: 380px; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+/* 主按钮（设计稿 .btn.primary）：渐变 + 顶部高光 + 落地阴影 */
 .primary-btn {
   margin-top: 8px;
   height: 40px;
   padding: 0 22px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   border: none;
-  background: var(--nook-gradient-brand);
-  color: #fff;
-  font-family: var(--nook-font-display);
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
 }
-.primary-btn:hover { filter: brightness(1.06); }
+.primary-btn:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.32); }
+.primary-btn:active { transform: translateY(0.5px); }
 
 .chat-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .chat-head .title { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .h-avatar {
@@ -588,19 +604,20 @@ onMounted(() => loadAgents())
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 11px;
-  background: var(--nook-gradient-teal);
-  color: #fff;
-  font-family: var(--nook-font-display);
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  font-family: var(--font-display);
   font-weight: 700;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   overflow: hidden;
 }
 .h-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.chat-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--nook-text); }
+.chat-head h2 { margin: 0; font-size: var(--t-lg); font-weight: 700; color: var(--ink); }
 .chat-head .title p {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--nook-text-muted);
+  color: var(--ink-2);
   max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -608,7 +625,7 @@ onMounted(() => loadAgents())
 }
 .chat-body { flex: 1; overflow-y: auto; padding: 24px 24px 28px; min-height: 0; display: flex; flex-direction: column; }
 .chat-body::-webkit-scrollbar { width: 6px; }
-.chat-body::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+.chat-body::-webkit-scrollbar-thumb { background: hsl(var(--sh-color) / 0.2); border-radius: 3px; }
 
 /* 空状态在可用高度内垂直居中，不再顶在上方 */
 .welcome { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; min-height: 0; padding: 24px 16px; text-align: center; }
@@ -622,73 +639,72 @@ onMounted(() => loadAgents())
   width: 160px;
   height: 160px;
   transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.4), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 40%, transparent), transparent 68%);
   filter: blur(18px);
   z-index: -1;
   pointer-events: none;
 }
-.hero img { position: relative; border-radius: 16px; box-shadow: 0 18px 40px -16px rgba(15, 118, 110, 0.5); margin-bottom: 14px; }
-.hero h3 { margin: 0; font-family: var(--nook-font-display); font-size: 25px; font-weight: 700; letter-spacing: -0.02em; color: var(--nook-text); }
-.hero p { margin: 8px 0 0; color: var(--nook-text-muted); font-size: 13.5px; }
+.hero :deep(.nook-logo) { position: relative; margin: 0 auto 14px; }
+.hero h3 { margin: 0; font-family: var(--font-display); font-size: var(--t-2xl); font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.hero p { margin: 6px 0 0; color: var(--ink-2); font-size: var(--t-sm); }
 .presets { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 12px; }
 @media (max-width: 640px) { .presets { grid-template-columns: 1fr; } }
+/* 预设卡片（设计稿 .preset）：暖白面 + 顶部高光，hover 抬起 + 主色描边 + 前导箭头 */
 .preset {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 15px 16px;
+  padding: 14px 16px;
   border-radius: var(--r-md);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface-raised);
-  color: var(--nook-text);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--t-sm);
   text-align: left;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(8px);
-  transition: border-color var(--dur) var(--ease-out), transform var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+  box-shadow: var(--elev-1), var(--inset-top);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 /* 前导箭头，hover 时滑入 */
 .preset::before {
   content: '→';
   flex-shrink: 0;
-  color: var(--nook-primary);
+  color: var(--primary);
   font-weight: 700;
   opacity: 0;
   transform: translateX(-6px);
-  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 .preset:hover {
-  border-color: var(--nook-primary);
+  border-color: var(--primary);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  background: var(--nook-gradient-wash);
+  box-shadow: var(--elev-2), var(--inset-top);
 }
 .preset:hover::before { opacity: 1; transform: none; }
 
-.turns { display: flex; flex-direction: column; gap: var(--space-5); width: 92%; max-width: 1100px; margin: 0 auto; }
+.turns { display: flex; flex-direction: column; gap: 22px; width: 92%; max-width: 760px; margin: 0 auto; }
 .turn { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; animation: nook-rise var(--dur-slow) var(--ease-out) both; }
 .turn.user { align-items: flex-end; }
-.role-tag { font-family: var(--nook-font-display); font-size: 11.5px; letter-spacing: 0.04em; color: var(--nook-text-muted); padding: 0 4px; }
+.role-tag { font-family: var(--font-display); font-size: 11.5px; letter-spacing: 0.02em; color: var(--ink-3); padding: 0 4px; }
+/* AI 对话气泡（设计稿 .tbubble）：助手 = 暖白面，用户 = grad-primary */
 .bubble {
   padding: 13px 17px;
   border-radius: 18px 18px 18px 6px;
-  max-width: 85%;
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface-raised);
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(8px);
+  max-width: 90%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--elev-1), var(--inset-top);
+  line-height: 1.6;
 }
 .turn.user .bubble {
   border-radius: 18px 18px 6px 18px;
-  background: var(--nook-bubble-mine-bg);
-  border-color: var(--nook-bubble-mine-border);
-  color: var(--nook-bubble-mine-fg);
-  box-shadow: var(--nook-bubble-mine-shadow);
+  background: var(--grad-primary);
+  border-color: transparent;
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
-.bubble pre { margin: 0; font-family: var(--nook-font-sans); font-size: 14px; line-height: 1.6; color: inherit; white-space: pre-wrap; word-break: break-word; }
+.bubble pre { margin: 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; color: inherit; white-space: pre-wrap; word-break: break-word; }
 
 .typing { display: inline-flex; gap: 4px; align-items: center; }
 .typing i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1s infinite ease-in-out; }
@@ -705,55 +721,84 @@ onMounted(() => loadAgents())
 }
 /* 输入栏与对话同宽（92%·上限 1100），超宽屏两侧只留窄边 */
 .composer-inner {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
   width: 92%;
   max-width: 1100px;
   margin: 0 auto;
 }
-.composer textarea {
+/* 一体式输入条：暖白面 + 细描边 + 内陷阴影，聚焦时主色描边 + ring */
+.composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.composer-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--ring);
+}
+.composer-box textarea {
   flex: 1;
+  min-width: 0;
   resize: none;
-  min-height: 44px;
+  min-height: 30px;
   max-height: 200px;
-  padding: 11px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.6);
+  padding: 9px 6px;
+  border: 0;
+  background: transparent;
   font: inherit;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--nook-text);
+  color: var(--ink);
   outline: none;
+  overflow-y: auto;
 }
-html.dark .composer textarea { background: rgba(4, 47, 46, 0.5); }
-.composer textarea:focus {
-  border-color: var(--nook-primary);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.16);
-}
-.send-btn {
+.composer-box textarea::placeholder { color: var(--ink-3); }
+/* 一体式发送按钮：贴右下角，随框增高始终对齐底部 */
+.composer-send {
+  position: relative;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: var(--r-sm);
-  border: none;
-  background: var(--nook-gradient-brand);
-  color: #fff;
-  font-family: var(--nook-font-display);
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.02em;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--grad-primary);
+  color: var(--on-primary);
   cursor: pointer;
-  box-shadow: 0 10px 22px -12px rgba(20, 184, 166, 0.7);
-  transition: filter var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.send-btn:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); box-shadow: 0 16px 30px -12px rgba(20, 184, 166, 0.8); }
-.send-btn:active:not(:disabled) { transform: translateY(0); }
-.send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.composer-send:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+.composer-send:active:not(:disabled) { transform: translateY(0.5px) scale(0.96); }
+.composer-send:disabled {
+  cursor: not-allowed;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.composer-send.loading { color: transparent; pointer-events: none; }
+.composer-send.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--on-primary);
+  border-top-color: transparent;
+  animation: composer-spin 0.62s linear infinite;
+}
+@keyframes composer-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 768px) {
   .ai { grid-template-columns: 200px 1fr; }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { register } from '@/api/auth'
 import AuthShell from '@/components/AuthShell.vue'
 import '@/styles/auth-form.css'
@@ -17,21 +17,22 @@ const form = reactive({
 const loading = ref(false)
 const submitError = ref('')
 
+// 评分：长度≥8 / 含大写 / 含数字 / 含符号，各 1 分；颜色全用 token，跟随配色
 const strength = computed(() => {
   const p = form.password
-  if (!p) return { level: 0, label: '', color: '' }
+  if (!p) return { level: 0, label: '', color: 'var(--ink-3)' }
   let score = 0
   if (p.length >= 8) score++
   if (/[A-Z]/.test(p)) score++
   if (/[0-9]/.test(p)) score++
   if (/[^A-Za-z0-9]/.test(p)) score++
   const map = [
-    { level: 1, label: '太弱', color: '#ef4444' },
-    { level: 2, label: '一般', color: '#f59e0b' },
-    { level: 3, label: '不错', color: '#10b981' },
-    { level: 4, label: '很强', color: '#059669' }
+    { level: 1, label: '太弱', color: 'var(--danger)' },
+    { level: 2, label: '一般', color: 'var(--accent)' },
+    { level: 3, label: '不错', color: 'var(--success)' },
+    { level: 4, label: '很强', color: 'var(--success)' }
   ]
-  return map[Math.min(score, 4) - 1] ?? { level: 1, label: '太弱', color: '#ef4444' }
+  return map[Math.min(score, 4) - 1] ?? map[0]
 })
 
 function validate(): string | null {
@@ -56,7 +57,7 @@ async function onSubmit() {
       password: form.password,
       nickname: form.nickname || undefined
     })
-    ElMessage.success('注册成功，请登录')
+    toast.success('注册成功，请登录')
     router.replace({ name: 'login', query: { username: form.username } })
   } catch (e: any) {
     submitError.value = e?.message ?? '注册失败，请稍后再试'
@@ -108,9 +109,7 @@ async function onSubmit() {
             <span
               v-for="i in 4"
               :key="i"
-              :style="{
-                background: i <= strength.level ? strength.color : 'rgba(99,102,241,0.15)'
-              }"
+              :style="i <= strength.level ? { background: strength.color } : undefined"
             />
           </div>
           <span class="strength-label" :style="{ color: strength.color }">{{ strength.label }}</span>
@@ -169,7 +168,7 @@ async function onSubmit() {
 .strength {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin-top: 8px;
 }
 .strength-bar {
@@ -178,15 +177,17 @@ async function onSubmit() {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
+/* 空格子用 --surface-2，填充段由内联 token 色覆盖，整条随配色变化 */
 .strength-bar span {
-  height: 4px;
-  border-radius: 2px;
-  transition: background 200ms ease;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  transition: background var(--dur) var(--ease);
 }
 .strength-label {
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 32px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  min-width: 30px;
   text-align: right;
 }
 
@@ -201,15 +202,11 @@ async function onSubmit() {
 .form-error {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
+  border-radius: var(--r-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
-}
-html.dark .form-error {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fecaca;
 }
 
 .loading-dot {

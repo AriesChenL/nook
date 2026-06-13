@@ -7,6 +7,7 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import 'highlight.js/styles/github-dark.css'
 import './styles/global.css'
 import './composables/useTheme'
+import './composables/usePalette'
 
 const app = createApp(App)
 app.use(createPinia())

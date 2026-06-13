@@ -1,134 +1,104 @@
+/* ============================================================
+   Nook · 全局样式
+   设计语言：柔和拟物（soft skeuomorphism）—— 见 tokens.css
+   本文件提供：① --nook-* 旧变量到新 token 的别名层（让既有组件
+   自动换肤）② 基础重置 ③ 通用 .nk-* 表单/按钮组件 ④ Element Plus 适配
+   ============================================================ */
+
+@import './tokens.css';
+
+/* ───────── 别名层：把历史 --nook-* / 尺度变量映射到新 token ─────────
+   var() 在使用处惰性解析，因此这些别名会自动跟随当前 data-palette / 深色 */
 :root {
-  --nook-font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --nook-font-display: 'Clash Display', 'DM Sans', system-ui, sans-serif;
+  --nook-font-sans: var(--font-sans);
+  --nook-font-display: var(--font-display);
 
-  /* Mint Aurora · Teal + Sunset Orange */
-  --nook-primary: #14b8a6;       /* teal 500 */
-  --nook-primary-deep: #0f766e;  /* teal 700 */
-  --nook-primary-soft: #5eead4;  /* teal 300 */
-  --nook-accent: #fb923c;        /* orange 400 */
-  --nook-accent-deep: #f97316;   /* orange 500 */
-  --nook-highlight: #fbbf24;     /* amber 400 */
+  --nook-bg: var(--bg);
+  --nook-primary: var(--primary);
+  --nook-primary-deep: var(--primary-strong);
+  --nook-primary-soft: var(--primary-soft);
+  --nook-accent: var(--accent);
+  --nook-accent-deep: var(--primary-strong);
+  --nook-highlight: var(--accent);
 
-  --nook-text: #0f3a36;
-  --nook-text-muted: #4b5b59;
-  --nook-text-faint: #7c8a88;
+  --nook-text: var(--ink);
+  --nook-text-muted: var(--ink-2);
+  --nook-text-faint: var(--ink-3);
 
-  /* 表面 / 玻璃质感 —— 分两级，卡片用 raised，浮层用 overlay */
-  --nook-surface: rgba(255, 255, 255, 0.72);
-  --nook-surface-raised: rgba(255, 255, 255, 0.86);
-  --nook-surface-sunken: rgba(15, 118, 110, 0.05);
-  --nook-surface-border: rgba(20, 184, 166, 0.18);
-  --nook-hairline: rgba(15, 58, 54, 0.08);
+  --nook-surface: var(--surface);
+  --nook-surface-raised: var(--surface);
+  --nook-surface-sunken: var(--surface-sunken);
+  --nook-surface-border: var(--line);
+  --nook-hairline: var(--line);
 
-  /* 品牌渐变 —— 全站统一引用，避免各处手写 */
-  --nook-gradient-brand: linear-gradient(135deg, #0f766e 0%, #14b8a6 42%, #fb923c 100%);
-  --nook-gradient-teal: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 45%, #0f766e 100%);
-  --nook-gradient-warm: linear-gradient(135deg, #fbbf24 0%, #fb923c 55%, #f97316 100%);
-  --nook-gradient-wash: linear-gradient(135deg, rgba(20, 184, 166, 0.16), rgba(251, 146, 60, 0.12));
+  --nook-gradient-brand: var(--grad-primary);
+  --nook-gradient-teal: var(--grad-primary);
+  --nook-gradient-warm: var(--grad-accent);
+  --nook-gradient-wash: var(--primary-soft);
 
-  /* 自己/用户消息气泡 —— 浅色用浅青绿填充 + 深青绿字，清爽好读 */
-  --nook-bubble-mine-bg: linear-gradient(135deg, #d7fbf3 0%, #b9f5e8 100%);
-  --nook-bubble-mine-fg: var(--nook-primary-deep);
-  --nook-bubble-mine-border: rgba(20, 184, 166, 0.28);
-  --nook-bubble-mine-shadow: 0 8px 20px -14px rgba(15, 118, 110, 0.45);
+  /* 自己/用户消息气泡 —— 柔和拟物：主色渐变 + on-primary 字 */
+  --nook-bubble-mine-bg: var(--grad-primary);
+  --nook-bubble-mine-fg: var(--on-primary);
+  --nook-bubble-mine-border: transparent;
+  --nook-bubble-mine-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 
-  /* 圆角层级 */
-  --r-xs: 8px;
-  --r-sm: 12px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --r-xl: 28px;
-  --r-pill: 999px;
+  /* 阴影层级 → 拟物 elevation */
+  --shadow-sm: var(--elev-1);
+  --shadow-md: var(--elev-2);
+  --shadow-lg: var(--elev-3);
+  --shadow-glow: var(--elev-2), var(--ring);
+  --nook-shadow: var(--elev-3);
 
-  /* 阴影层级 + 光晕 */
-  --shadow-sm: 0 2px 8px -2px rgba(15, 118, 110, 0.14);
-  --shadow-md: 0 14px 34px -16px rgba(15, 118, 110, 0.32);
-  --shadow-lg: 0 30px 80px -20px rgba(15, 118, 110, 0.28);
-  --shadow-glow: 0 0 0 1px rgba(20, 184, 166, 0.35), 0 8px 28px -8px rgba(20, 184, 166, 0.5);
-  --nook-shadow: var(--shadow-lg); /* 兼容旧引用 */
+  /* 动效别名 */
+  --ease-out: var(--ease);
 
-  /* 动效 token */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --dur-fast: 140ms;
-  --dur: 220ms;
-  --dur-slow: 420ms;
-
-  /* ── Mint+ 地基：排版层级（标题用 display，正文用 sans）── */
-  --text-xs: 11.5px;
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
+  /* 排版尺度（兼容旧引用） */
+  --text-xs: var(--t-xs);
+  --text-sm: var(--t-sm);
+  --text-base: var(--t-base);
+  --text-md: var(--t-md);
+  --text-lg: var(--t-lg);
+  --text-xl: var(--t-xl);
+  --text-2xl: var(--t-2xl);
   --lh-tight: 1.2;
   --lh-snug: 1.45;
   --lh-normal: 1.6;
-  --tracking-tight: -0.02em; /* 大标题收紧 */
+  --tracking-tight: -0.02em;
   --tracking-snug: -0.01em;
-  --tracking-wide: 0.04em;   /* display 小字 / 标签 */
+  --tracking-wide: 0.04em;
 
-  /* ── Mint+ 地基：间距尺度（替代各页硬编码 px，统一节奏）── */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
+  /* 间距尺度（兼容旧引用） */
+  --space-1: var(--s-1);
+  --space-2: var(--s-2);
+  --space-3: var(--s-3);
+  --space-4: var(--s-4);
+  --space-5: var(--s-5);
+  --space-6: var(--s-6);
+  --space-7: var(--s-7);
+  --space-8: var(--s-8);
 
-  /* ── Mint+ 地基：玻璃模糊三档（收敛此前 12/14/16/24 多种写法）── */
-  --glass-soft: blur(8px) saturate(140%);
-  --glass-std: blur(16px) saturate(150%);
-  --glass-strong: blur(24px) saturate(160%);
+  /* 模糊三档（柔和拟物面多为不透明，模糊作浮层细节增强） */
+  --glass-soft: blur(8px) saturate(120%);
+  --glass-std: blur(16px) saturate(130%);
+  --glass-strong: blur(24px) saturate(140%);
 
-  --el-color-primary: #14b8a6;
-  --el-color-primary-light-3: #2dd4bf;
-  --el-color-primary-light-5: #5eead4;
-  --el-color-primary-light-7: #99f6e4;
-  --el-color-primary-light-9: #ccfbf1;
-  --el-color-primary-dark-2: #0f766e;
+  /* Element Plus 主色（珊瑚） */
+  --el-color-primary: oklch(0.64 0.15 32);
+  --el-color-primary-light-3: oklch(0.71 0.13 34);
+  --el-color-primary-light-5: oklch(0.78 0.1 36);
+  --el-color-primary-light-7: oklch(0.86 0.07 38);
+  --el-color-primary-light-9: oklch(0.94 0.03 40);
+  --el-color-primary-dark-2: oklch(0.56 0.16 30);
   --el-border-radius-base: 12px;
 }
-
 html.dark {
-  --nook-text: #ecfdf5;
-  --nook-text-muted: #99f6e4;
-  --nook-text-faint: #6b9b94;
-
-  --nook-surface: rgba(6, 50, 47, 0.52);
-  --nook-surface-raised: rgba(8, 58, 54, 0.7);
-  --nook-surface-sunken: rgba(94, 234, 212, 0.06);
-  --nook-surface-border: rgba(94, 234, 212, 0.2);
-  --nook-hairline: rgba(94, 234, 212, 0.1);
-
-  --nook-gradient-wash: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(251, 146, 60, 0.14));
-
-  /* 暗色下自己气泡保留深青绿渐变 + 白字 */
-  --nook-bubble-mine-bg: var(--nook-gradient-teal);
-  --nook-bubble-mine-fg: #ecfdf5;
-  --nook-bubble-mine-border: transparent;
-  --nook-bubble-mine-shadow: 0 10px 24px -12px rgba(20, 184, 166, 0.55);
-
-  --shadow-sm: 0 2px 10px -2px rgba(2, 12, 11, 0.5);
-  --shadow-md: 0 16px 40px -18px rgba(2, 12, 11, 0.66);
-  --shadow-lg: 0 30px 80px -20px rgba(2, 12, 11, 0.72);
-  --shadow-glow: 0 0 0 1px rgba(94, 234, 212, 0.4), 0 8px 30px -8px rgba(45, 212, 191, 0.45);
   color-scheme: dark;
-
-  /* dark 主题下 EP 会覆盖一遍主色，这里再压回 teal */
-  --el-color-primary: #14b8a6;
-  --el-color-primary-light-3: #2dd4bf;
-  --el-color-primary-light-5: #5eead4;
-  --el-color-primary-light-7: #99f6e4;
-  --el-color-primary-light-9: #134e4a;
-  --el-color-primary-dark-2: #5eead4;
+  --el-color-primary: oklch(0.7 0.15 34);
+  --el-color-primary-light-9: oklch(0.35 0.06 34);
+  --el-color-primary-dark-2: oklch(0.78 0.12 36);
 }
 
+/* ───────── 基础重置 ───────── */
 *,
 *::before,
 *::after {
@@ -149,37 +119,30 @@ body {
 }
 
 body {
-  font-family: var(--nook-font-sans);
-  color: var(--nook-text);
-  line-height: var(--lh-normal);
-  background:
-    radial-gradient(78% 60% at 8% -8%, rgba(94, 234, 212, 0.28), transparent 60%),
-    radial-gradient(70% 55% at 100% 8%, rgba(251, 146, 60, 0.16), transparent 58%),
-    radial-gradient(90% 70% at 50% 120%, rgba(20, 184, 166, 0.14), transparent 60%),
-    #f0fdfa;
-  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-size: var(--t-base);
+  color: var(--ink);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
   text-rendering: optimizeLegibility;
-}
-
-html.dark body {
+  overflow-x: hidden;
   background:
-    radial-gradient(78% 60% at 8% -8%, rgba(13, 92, 83, 0.55), transparent 60%),
-    radial-gradient(70% 55% at 100% 8%, rgba(120, 53, 15, 0.4), transparent 58%),
-    radial-gradient(90% 70% at 50% 120%, rgba(13, 92, 83, 0.4), transparent 60%),
-    #042f2e;
+    radial-gradient(72% 55% at 6% -6%, var(--bg-grad-a), transparent 60%),
+    radial-gradient(64% 50% at 100% 6%, var(--bg-grad-b), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
-/* 极细颗粒 overlay —— 给纯色/玻璃面增加质感与深度，不可交互 */
+/* 极细颗粒 overlay —— 给纯色面增加质感与深度，不可交互 */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.035;
+  opacity: 0.03;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
@@ -187,47 +150,42 @@ html.dark body::after {
   opacity: 0.05;
 }
 
-/* 标题统一显示字体 */
-h1, h2, h3 {
-  font-family: var(--nook-font-display);
-  letter-spacing: var(--tracking-snug);
-  line-height: var(--lh-tight);
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.18;
+  margin: 0;
 }
-h1 { letter-spacing: var(--tracking-tight); }
+h1 { letter-spacing: -0.02em; }
 
-/* 文本选区 */
 ::selection {
-  background: rgba(20, 184, 166, 0.28);
-  color: var(--nook-primary-deep);
-}
-html.dark ::selection {
-  background: rgba(94, 234, 212, 0.3);
-  color: #ecfdf5;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
 }
 
-/* 统一焦点环 */
 :focus-visible {
-  outline: 2px solid var(--nook-primary);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* 细玻璃滚动条 */
+/* 滚动条 —— 中性细条 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(20, 184, 166, 0.4) transparent;
+  scrollbar-color: hsl(var(--sh-color) / 0.25) transparent;
 }
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 *::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(20, 184, 166, 0.5), rgba(15, 118, 110, 0.5));
+  background: hsl(var(--sh-color) / 0.2);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(20, 184, 166, 0.8), rgba(251, 146, 60, 0.6));
+  background: hsl(var(--sh-color) / 0.32);
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-track {
@@ -244,156 +202,168 @@ html.dark ::selection {
   to { opacity: 1; }
 }
 .nook-rise {
-  animation: nook-rise var(--dur-slow) var(--ease-out) both;
+  animation: nook-rise var(--dur-slow) var(--ease) both;
 }
 
-/* ───────── Nook 通用表单 / 按钮（弹窗、表单复用，替代 EP 控件）───────── */
+/* ───────── Nook 通用表单 / 按钮（弹窗、表单复用，替代 EP 控件）─────────
+   柔和拟物：暖白面 + 细描边 + 顶部高光 + 内陷阴影 */
 .nk-field { margin-bottom: 16px; }
 .nk-field:last-child { margin-bottom: 0; }
 .nk-label {
   display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
+  margin-bottom: 7px;
+  font-size: var(--t-sm);
   font-weight: 600;
-  color: var(--nook-text);
+  color: var(--ink);
 }
-.nk-label .req { color: var(--nook-accent-deep); margin-left: 2px; }
-.nk-hint { margin: 6px 0 0; font-size: 12px; color: var(--nook-text-faint); line-height: 1.5; }
+.nk-label .req { color: var(--danger); margin-left: 3px; }
+.nk-hint { margin: 7px 0 0; font-size: var(--t-xs); color: var(--ink-3); line-height: 1.5; }
 
 .nk-input,
 .nk-textarea {
   width: 100%;
-  padding: 11px 14px;
+  padding: 0 14px;
+  height: 42px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  color: var(--nook-text);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--t-base);
   line-height: 1.5;
   outline: none;
-  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.nk-textarea { resize: vertical; min-height: 76px; }
+.nk-textarea { height: auto; min-height: 84px; padding: 11px 14px; resize: vertical; }
 .nk-input::placeholder,
-.nk-textarea::placeholder { color: var(--nook-text-faint); }
+.nk-textarea::placeholder { color: var(--ink-3); }
 .nk-input:hover,
-.nk-textarea:hover { border-color: rgba(20, 184, 166, 0.5); }
+.nk-textarea:hover { border-color: var(--primary); }
 .nk-input:focus,
 .nk-textarea:focus {
-  border-color: var(--nook-primary);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.16);
+  border-color: var(--primary);
+  box-shadow: var(--ring), inset 0 1px 3px hsl(var(--sh-color) / 0.05);
 }
 
 .nk-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   height: 40px;
   padding: 0 18px;
   border-radius: var(--r-sm);
   border: 1px solid transparent;
-  font-family: var(--nook-font-display);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.01em;
+  font-size: var(--t-base);
+  letter-spacing: -0.005em;
+  white-space: nowrap;
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out), filter var(--dur) var(--ease-out);
+  user-select: none;
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease), border-color var(--dur) var(--ease), filter var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.nk-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.nk-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+/* 主按钮 —— 渐变填充 + 顶部高光 + 落地阴影；按下回弹 */
 .nk-btn--primary {
-  background: var(--nook-gradient-brand);
-  color: #fff;
-  box-shadow: 0 10px 22px -12px rgba(20, 184, 166, 0.8);
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-.nk-btn--primary:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+.nk-btn--primary:hover:not(:disabled) { filter: brightness(1.04); transform: translateY(-1px); box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.32); }
+.nk-btn--primary:active:not(:disabled) { transform: translateY(0.5px); filter: brightness(0.98); box-shadow: var(--elev-1), inset 0 2px 5px rgba(0, 0, 0, 0.16); }
+/* 次/幽灵按钮 —— 暖白面 + 细描边 + 顶部高光 */
 .nk-btn--ghost {
-  background: var(--nook-surface);
-  border-color: var(--nook-surface-border);
-  color: var(--nook-text);
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  box-shadow: var(--elev-1), var(--inset-top);
 }
-.nk-btn--ghost:hover:not(:disabled) { border-color: var(--nook-primary); color: var(--nook-primary-deep); background: rgba(20, 184, 166, 0.08); }
-html.dark .nk-btn--ghost:hover:not(:disabled) { color: var(--nook-primary-soft); }
+.nk-btn--ghost:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--primary); color: var(--primary-strong); box-shadow: var(--elev-2), var(--inset-top); }
+.nk-btn--ghost:active:not(:disabled) { transform: translateY(0.5px); box-shadow: inset 0 2px 5px hsl(var(--sh-color) / 0.14); }
+/* 危险按钮 */
 .nk-btn--danger {
-  background: linear-gradient(135deg, #f87171, #ef4444);
+  background: linear-gradient(180deg, oklch(0.64 0.17 27), oklch(0.56 0.18 26));
   color: #fff;
-  box-shadow: 0 10px 22px -12px rgba(239, 68, 68, 0.7);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-.nk-btn--danger:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
+.nk-btn--danger:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.28); }
+.nk-btn--danger:active:not(:disabled) { transform: translateY(0.5px); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2); }
 
-/* ───────── Element Plus 适配 · el-select（触发器 + teleport 浮层）─────────
-   浮层 teleport 到 body，scoped 样式够不到，统一在此覆盖成玻璃/青绿质感 */
+/* ───────── Element Plus 适配 · el-select（触发器 + teleport 浮层）───────── */
 .el-select__wrapper {
   border-radius: var(--r-sm) !important;
-  background: var(--nook-surface) !important;
-  box-shadow: inset 0 0 0 1px var(--nook-surface-border) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: box-shadow var(--dur) var(--ease-out) !important;
-  min-height: 32px;
+  background: var(--surface) !important;
+  box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 1px 3px hsl(var(--sh-color) / 0.07) !important;
+  transition: box-shadow var(--dur) var(--ease) !important;
+  min-height: 36px;
 }
 .el-select__wrapper:hover {
-  box-shadow: inset 0 0 0 1px var(--nook-primary) !important;
+  box-shadow: inset 0 0 0 1px var(--primary) !important;
 }
 .el-select__wrapper.is-focused,
 .el-select__wrapper.is-hovering {
-  box-shadow: inset 0 0 0 1px var(--nook-primary), 0 0 0 4px rgba(20, 184, 166, 0.16) !important;
+  box-shadow: inset 0 0 0 1px var(--primary), var(--ring) !important;
 }
-.el-select__placeholder,
-.el-select__selected-item {
-  color: var(--nook-text) !important;
-  font-weight: 500;
-}
-.el-select .el-select__caret {
-  color: var(--nook-primary) !important;
-}
+.el-select__placeholder { color: var(--ink-3) !important; }
+.el-select__selected-item { color: var(--ink) !important; font-weight: 500; }
+.el-select .el-select__caret { color: var(--primary) !important; }
 
-/* 下拉浮层 */
 .el-popper.is-light.el-select__popper,
 .el-select-dropdown {
   border-radius: var(--r-md) !important;
-  border: 1px solid var(--nook-surface-border) !important;
-  background: var(--nook-surface-raised) !important;
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  box-shadow: var(--shadow-lg) !important;
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+  box-shadow: var(--elev-float), var(--inset-top) !important;
   overflow: hidden;
 }
 .el-select__popper.el-popper .el-popper__arrow::before {
-  background: var(--nook-surface-raised) !important;
-  border-color: var(--nook-surface-border) !important;
+  background: var(--surface) !important;
+  border-color: var(--line) !important;
 }
-.el-select-dropdown__list {
-  padding: 6px !important;
-}
+.el-select-dropdown__list { padding: 6px !important; }
 .el-select-dropdown__item {
   border-radius: var(--r-xs) !important;
   margin: 2px 0;
   height: 34px;
   line-height: 34px;
-  color: var(--nook-text) !important;
+  color: var(--ink) !important;
   font-weight: 500;
-  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .el-select-dropdown__item.is-hovering,
 .el-select-dropdown__item:hover {
-  background: var(--nook-gradient-wash) !important;
-  color: var(--nook-primary-deep) !important;
-}
-html.dark .el-select-dropdown__item.is-hovering,
-html.dark .el-select-dropdown__item:hover {
-  color: var(--nook-primary-soft) !important;
+  background: var(--primary-soft) !important;
+  color: var(--primary-strong) !important;
 }
 .el-select-dropdown__item.is-selected {
-  background: var(--nook-gradient-teal) !important;
-  color: #fff !important;
+  background: var(--grad-primary) !important;
+  color: var(--on-primary) !important;
   font-weight: 600;
 }
 
+/* ───── 全局消息（ElMessage）：success 跟随珊瑚主题，默认绿不符品牌 ───── */
+.el-message.el-message--success {
+  background-color: var(--primary-soft) !important;
+  border-color: color-mix(in oklch, var(--primary) 28%, transparent) !important;
+}
+.el-message.el-message--success .el-message__content {
+  color: var(--primary-strong) !important;
+}
+.el-message.el-message--success .el-message__icon {
+  color: var(--primary-strong) !important;
+}
+
 /* ───── 别名药丸：在主名（备注）旁附带原昵称 ───── */
-/* 柔青渐变底 + 细描边 + 标签字号；左侧小标签 icon 暗示「这是备注下的真名」。 */
 .nk-alias {
   display: inline-flex;
   align-items: center;
@@ -402,10 +372,10 @@ html.dark .el-select-dropdown__item:hover {
   max-width: 140px;
   padding: 1px 8px 1px 6px;
   border-radius: var(--r-pill);
-  background: var(--nook-gradient-wash);
-  border: 1px solid var(--nook-surface-border);
-  color: var(--nook-text-muted);
-  font-family: var(--nook-font-sans);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
@@ -422,7 +392,6 @@ html.dark .el-select-dropdown__item:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 略大一档，用于聊天室标题等空间充裕处 */
 .nk-alias--lg {
   max-width: 220px;
   padding: 2px 10px 2px 8px;

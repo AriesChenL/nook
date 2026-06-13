@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { confirm } from '@/composables/useConfirm'
 import {
   getConversation,
@@ -53,7 +53,7 @@ const pendingImages = ref<PendingImage[]>([])
 
 function addPending(file: File) {
   if (file.size > MAX_FILE_SIZE) {
-    ElMessage.error('图片超过 200MB 上限')
+    toast.error('图片超过 200MB 上限')
     return
   }
   pendingImages.value.push({ file, url: URL.createObjectURL(file) })
@@ -125,9 +125,9 @@ async function saveRemark() {
     // 写回全局备注表：标题别名 chip 与会话列表均响应式联动，无需重拉
     friendStore.setRemark(peerId, remark)
     showFriendPanel.value = false
-    ElMessage.success(remark ? '备注已更新' : '已清除备注')
+    toast.success(remark ? '备注已更新' : '已清除备注')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '保存失败')
+    toast.error(e?.message ?? '保存失败')
   } finally {
     savingRemark.value = false
   }
@@ -212,7 +212,7 @@ async function onSend() {
       await scrollBottom()
     }
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '发送失败')
+    toast.error(e?.message ?? '发送失败')
   } finally {
     sending.value = false
     // 发送完成（textarea 因 disabled 失焦）后重新聚焦，方便连续输入
@@ -230,7 +230,7 @@ function pickFile() {
 async function uploadAndSend(file: File) {
   if (uploading.value) return
   if (file.size > MAX_FILE_SIZE) {
-    ElMessage.error('文件超过 200MB 上限')
+    toast.error('文件超过 200MB 上限')
     return
   }
   uploading.value = true
@@ -247,7 +247,7 @@ async function uploadAndSend(file: File) {
     if (!messages.value.some((m) => m.id === msg.id)) messages.value.push(msg)
     await scrollBottom()
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '发送失败')
+    toast.error(e?.message ?? '发送失败')
   } finally {
     uploading.value = false
   }
@@ -298,7 +298,7 @@ async function onRecall(m: Message) {
     m.recalled = true
     m.content = '[消息已撤回]'
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '撤回失败')
+    toast.error(e?.message ?? '撤回失败')
   }
 }
 
@@ -320,7 +320,7 @@ async function loadRead(m: Message) {
     const next = { ...readMap.value }
     delete next[m.id]
     readMap.value = next
-    ElMessage.error(e?.message ?? '获取已读状态失败')
+    toast.error(e?.message ?? '获取已读状态失败')
   }
 }
 
@@ -509,7 +509,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="composer-row">
+      <!-- 一体式输入条：附件、输入区、发送按钮包在同一个圆角框里 -->
+      <div class="composer-box">
         <input
           ref="fileInput"
           type="file"
@@ -518,7 +519,7 @@ onUnmounted(() => {
           @change="onFileChange"
         />
         <button
-          class="attach-btn"
+          class="composer-tool"
           type="button"
           :disabled="uploading || sending"
           :aria-busy="uploading || undefined"
@@ -540,16 +541,16 @@ onUnmounted(() => {
           @paste="onPaste"
         />
         <button
-          class="send-btn"
+          class="composer-send"
+          :class="{ loading: sending }"
           :disabled="!canSend"
           :aria-busy="sending || undefined"
+          aria-label="发送"
           @click="onSend"
         >
-          <svg v-if="!sending" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
-          <span v-if="!sending">发送</span>
-          <span v-else class="sending-dot"><i /><i /><i /></span>
         </button>
       </div>
       </div>
@@ -636,7 +637,7 @@ onUnmounted(() => {
   transition: background var(--dur) var(--ease-out);
 }
 .room-title--clickable:hover {
-  background: rgba(20, 184, 166, 0.08);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 .room-title--clickable:focus-visible {
   outline: 2px solid var(--nook-primary);
@@ -700,8 +701,8 @@ onUnmounted(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  background: var(--success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 22%, transparent);
 }
 .online-dot.off {
   background: #94a3b8;
@@ -726,7 +727,7 @@ onUnmounted(() => {
   transition: background 200ms ease-out, border-color 200ms ease-out, color 200ms ease-out;
 }
 .icon-btn:hover {
-  background: rgba(20, 184, 166, 0.1);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
   border-color: var(--nook-primary);
   color: var(--nook-primary-deep);
 }
@@ -742,10 +743,10 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   overflow-y: auto;
   padding: var(--space-4) var(--space-6) var(--space-5);
 }
-/* 居中阅读列：宽度=面板 92%、上限 1400px —— 两侧只留窄边，超宽屏才封顶 */
+/* 居中阅读列：宽度=面板 92%、上限 940px（设计稿 .msgs-inner） */
 .msg-flow {
   width: 92%;
-  max-width: 1400px;
+  max-width: 940px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -753,11 +754,11 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 }
 .messages::-webkit-scrollbar { width: 5px; }
 .messages::-webkit-scrollbar-thumb {
-  background: rgba(20, 184, 166, 0.2);
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
   border-radius: 3px;
 }
 .messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(20, 184, 166, 0.35);
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 /* ───── Time divider ───── */
@@ -770,10 +771,10 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 .time-divider span {
   font-size: 11px;
   font-weight: 500;
-  color: var(--nook-text-muted);
-  background: rgba(20, 184, 166, 0.06);
+  color: var(--ink-3);
+  background: var(--surface-2);
   padding: 3px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-pill);
   letter-spacing: 0.02em;
 }
 
@@ -786,10 +787,10 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 .sys-msg span {
   max-width: 80%;
   font-size: 11.5px;
-  color: var(--nook-text-muted);
-  background: rgba(20, 184, 166, 0.06);
+  color: var(--ink-3);
+  background: var(--surface-2);
   padding: 4px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-pill);
   text-align: center;
   line-height: 1.5;
 }
@@ -798,7 +799,7 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
 .msg {
   display: flex;
   gap: 10px;
-  max-width: 72%;
+  max-width: 76%;
   padding: 1px 0;
   animation: msgIn 200ms ease-out;
 }
@@ -828,19 +829,19 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #14b8a6, #0d9488);
-  color: #fff;
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
   font-weight: 600;
   font-family: var(--nook-font-display);
   font-size: 14px;
-  box-shadow: 0 2px 8px -2px rgba(13, 148, 136, 0.3);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   user-select: none;
   overflow: hidden;
 }
 .msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .msg.mine .msg-avatar {
-  background: linear-gradient(135deg, #0f766e, #134e4a);
+  background: var(--grad-accent);
 }
 .msg-avatar-spacer {
   flex-shrink: 0;
@@ -883,52 +884,36 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   padding: 10px 14px;
   font-size: 14px;
   line-height: 1.55;
-  color: var(--nook-text);
+  color: var(--ink);
   word-break: break-word;
   white-space: pre-wrap;
-  background: var(--nook-surface);
-  border: 1px solid var(--nook-surface-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--elev-1), var(--inset-top);
   max-width: 100%;
 }
 
-/* 气泡圆角 — 根据分组位置动态调整，形成对话流 */
-/* 对方消息（左侧）*/
+/* 气泡圆角 — 柔和拟物对话流（设计稿 6px/18px 不对称圆角）*/
+/* 对方消息（左侧）：组首/独立 = 左上小角；续条 = 左上左下都收小 */
 .msg:not(.mine) .bubble {
-  border-radius: 4px 18px 18px 18px;
+  border-radius: 6px 18px 18px 18px;
 }
-.msg:not(.mine).group-first .bubble {
-  border-radius: 18px 18px 18px 4px;
-}
-.msg:not(.mine).group-mid .bubble {
-  border-radius: 4px 18px 18px 4px;
-}
+.msg:not(.mine).group-mid .bubble,
 .msg:not(.mine).group-last .bubble {
-  border-radius: 4px 18px 18px 18px;
-}
-.msg:not(.mine).group-solo .bubble {
-  border-radius: 18px 18px 18px 4px;
+  border-radius: 6px 18px 18px 6px;
 }
 
-/* 自己消息（右侧）*/
+/* 自己消息（右侧）：grad-primary，右上小角 */
 .msg.mine .bubble {
-  background: var(--nook-bubble-mine-bg);
-  border-color: var(--nook-bubble-mine-border);
-  color: var(--nook-bubble-mine-fg);
-  box-shadow: var(--nook-bubble-mine-shadow);
-  border-radius: 18px 4px 4px 18px;
+  background: var(--grad-primary);
+  border-color: transparent;
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  border-radius: 18px 6px 18px 18px;
 }
-.msg.mine.group-first .bubble {
-  border-radius: 18px 18px 4px 18px;
-}
-.msg.mine.group-mid .bubble {
-  border-radius: 18px 4px 4px 18px;
-}
+.msg.mine.group-mid .bubble,
 .msg.mine.group-last .bubble {
-  border-radius: 18px 4px 18px 18px;
-}
-.msg.mine.group-solo .bubble {
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 18px 6px 6px 18px;
 }
 
 .bubble.recalled {
@@ -956,7 +941,7 @@ html.dark .icon-btn:hover { color: var(--nook-primary-soft); }
   color: var(--nook-primary-deep);
 }
 .read-trigger.read-all {
-  color: #10b981;
+  color: var(--success);
 }
 .read-trigger:disabled {
   cursor: default;
@@ -986,12 +971,12 @@ html.dark .read-trigger:hover:not(:disabled) {
 }
 .msg:hover .recall-btn:hover {
   opacity: 1;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 .recall-btn:focus-visible {
   opacity: 1;
-  outline: 2px solid #ef4444;
+  outline: 2px solid var(--danger);
   outline-offset: 2px;
 }
 
@@ -1003,19 +988,30 @@ html.dark .read-trigger:hover:not(:disabled) {
   backdrop-filter: var(--glass-std);
   -webkit-backdrop-filter: var(--glass-std);
 }
-/* 与消息流同宽居中，两者对齐成一条阅读列 */
+/* 与消息流同宽居中，两者对齐成一条阅读列（设计稿 940） */
 .composer-inner {
   width: 92%;
-  max-width: 1400px;
+  max-width: 940px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.composer-row {
+/* 一体式输入条：暖白面 + 细描边 + 内陷阴影，聚焦时主色描边 + ring */
+.composer-box {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.composer-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--ring);
 }
 .file-hidden {
   display: none;
@@ -1110,7 +1106,7 @@ html.dark .read-trigger:hover:not(:disabled) {
   transition: background var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out), opacity var(--dur) var(--ease-out);
 }
 .paste-card__remove:hover {
-  background: #ef4444;
+  background: var(--danger);
   opacity: 1;
   transform: scale(1.1);
 }
@@ -1119,116 +1115,101 @@ html.dark .read-trigger:hover:not(:disabled) {
   outline: 2px solid var(--nook-primary);
   outline-offset: 2px;
 }
-.attach-btn {
+/* 框内工具按钮（附件）—— 与发送按钮等高，hover 主色软底 */
+.composer-tool {
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  border: 1px solid var(--nook-surface-border);
-  background: transparent;
-  color: var(--nook-text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-xs);
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
   cursor: pointer;
-  transition: color 150ms ease, border-color 150ms ease;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.attach-btn:hover:not(:disabled) {
-  color: var(--nook-primary);
-  border-color: var(--nook-primary);
+.composer-tool:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
 }
-.attach-btn:disabled {
+.composer-tool:active:not(:disabled) { transform: scale(0.92); }
+.composer-tool:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 .up-pct {
   font-size: 11px;
   font-weight: 700;
-  color: var(--nook-primary);
+  color: var(--primary);
 }
-.composer textarea {
+.composer-box textarea {
   flex: 1;
   min-width: 0;
   /* 高度由 JS 自动撑高（autoGrow），到 max-height 后转为内部滚动 */
   resize: none;
-  min-height: 44px;
+  min-height: 30px;
   max-height: 176px;
-  padding: 11px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.6);
+  padding: 9px 6px;
+  border: 0;
+  background: transparent;
   font: inherit;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--nook-text);
+  color: var(--ink);
   outline: none;
   overflow-y: auto;
-  transition: border-color 200ms ease-out, box-shadow 200ms ease-out, height 120ms var(--ease-out);
+  transition: height 120ms var(--ease);
 }
-html.dark .composer textarea {
-  background: rgba(4, 47, 46, 0.5);
-}
-.composer textarea:focus {
-  border-color: var(--nook-primary);
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
-}
-/* 细滚动条，仅在超过最大高度时出现，配色与对话区一致 */
-.composer textarea::-webkit-scrollbar { width: 6px; }
-.composer textarea::-webkit-scrollbar-thumb {
-  background: rgba(20, 184, 166, 0.25);
+.composer-box textarea::placeholder { color: var(--ink-3); }
+.composer-box textarea::-webkit-scrollbar { width: 6px; }
+.composer-box textarea::-webkit-scrollbar-thumb {
+  background: hsl(var(--sh-color) / 0.2);
   border-radius: 3px;
 }
-.composer textarea::-webkit-scrollbar-thumb:hover { background: rgba(20, 184, 166, 0.4); }
-.composer textarea { scrollbar-width: thin; scrollbar-color: rgba(20, 184, 166, 0.3) transparent; }
-.send-btn {
+.composer-box textarea::-webkit-scrollbar-thumb:hover { background: hsl(var(--sh-color) / 0.32); }
+/* 一体式发送按钮：贴右下角，随框增高始终对齐底部 */
+.composer-send {
+  position: relative;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 14px;
-  border: none;
-  background: linear-gradient(135deg, #14b8a6, #0d9488);
-  color: #fff;
-  font-family: var(--nook-font-display);
-  font-weight: 600;
-  font-size: 14px;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--grad-primary);
+  color: var(--on-primary);
   cursor: pointer;
-  transition: filter 200ms ease-out, transform 200ms ease-out, box-shadow 200ms ease-out;
-  box-shadow: 0 2px 10px -3px rgba(20, 184, 166, 0.4);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.send-btn:hover:not(:disabled) {
-  filter: brightness(1.06);
-  box-shadow: 0 4px 14px -3px rgba(20, 184, 166, 0.5);
+.composer-send:hover:not(:disabled) {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-.send-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.send-btn:focus-visible {
-  outline: 2px solid var(--nook-primary);
-  outline-offset: 2px;
-}
-.send-btn:disabled {
+.composer-send:active:not(:disabled) { transform: translateY(0.5px) scale(0.96); }
+.composer-send:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
-  box-shadow: none;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
-
-/* ───── Sending indicator ───── */
-.sending-dot {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
-.sending-dot i {
-  width: 5px;
-  height: 5px;
+.composer-send.loading { color: transparent; pointer-events: none; }
+.composer-send.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: currentColor;
-  animation: bounce 1s infinite ease-in-out;
+  border: 2px solid var(--on-primary);
+  border-top-color: transparent;
+  animation: composer-spin 0.62s linear infinite;
 }
-.sending-dot i:nth-child(2) { animation-delay: 0.15s; }
-.sending-dot i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes composer-spin { to { transform: rotate(360deg); } }
 
 /* ───── Animations ───── */
 @keyframes msgIn {
@@ -1331,10 +1312,11 @@ html.dark .remark-input { background: rgba(4, 47, 46, 0.5); }
   .msg { animation: none; }
   .icon-btn,
   .recall-btn,
-  .send-btn,
+  .composer-send,
+  .composer-tool,
   .room-title--clickable,
   .title-edit-hint,
-  .composer textarea {
+  .composer-box textarea {
     transition: none;
   }
 }

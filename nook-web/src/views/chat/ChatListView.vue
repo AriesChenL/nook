@@ -149,7 +149,7 @@ async function onGroupCreated(conv: Conversation) {
     <section class="room-pane">
       <router-view v-if="activeId !== null" :key="activeId" />
       <div v-else class="room-empty">
-        <img src="/logo.svg" alt="" width="64" height="64" />
+        <NookLogo :size="64" />
         <p>选择左侧会话开始聊天</p>
         <p class="hint">Nook · 即时聊天 + AI</p>
       </div>
@@ -162,10 +162,15 @@ async function onGroupCreated(conv: Conversation) {
 <style scoped>
 .chat-shell {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 322px 1fr;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
+}
+@media (max-width: 1040px) {
+  .chat-shell {
+    grid-template-columns: 280px 1fr;
+  }
 }
 @media (max-width: 900px) {
   .chat-shell {
@@ -176,10 +181,8 @@ async function onGroupCreated(conv: Conversation) {
 .conv-pane {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
   min-height: 0;
 }
 
@@ -187,92 +190,102 @@ async function onGroupCreated(conv: Conversation) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 16px 8px;
+  padding: 18px 16px 10px;
 }
 .pane-head h2 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
   font-weight: 700;
-  color: var(--nook-text);
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
+/* ＋ 新建：描边图标按钮（设计稿 .icon-btn.outline）*/
 .head-btn {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  border: 1px solid var(--nook-surface-border);
-  background: transparent;
-  color: var(--nook-text);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
   cursor: pointer;
-  transition: background 180ms ease, border-color 180ms ease;
+  box-shadow: var(--inset-top);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
 }
 .head-btn:hover {
-  background: rgba(20, 184, 166, 0.1);
-  border-color: var(--nook-primary);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-strong);
+  transform: translateY(-1px);
 }
+.head-btn:active { transform: translateY(0.5px) scale(0.96); }
 
 .search {
   position: relative;
-  margin: 6px 16px 12px;
+  margin: 4px 14px 12px;
 }
 .search svg {
   position: absolute;
-  left: 12px;
+  left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--nook-text-muted);
+  color: var(--ink-3);
 }
 .search input {
   width: 100%;
-  padding: 9px 12px 9px 34px;
-  border-radius: 10px;
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.5);
+  padding: 10px 12px 10px 36px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
   font: inherit;
   font-size: 13.5px;
-  color: var(--nook-text);
+  color: var(--ink);
   outline: none;
-  transition: border-color 180ms ease, background 180ms ease;
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-html.dark .search input {
-  background: rgba(4, 47, 46, 0.45);
-}
+.search input::placeholder { color: var(--ink-3); }
 .search input:focus {
-  border-color: var(--nook-primary);
-  background: rgba(255, 255, 255, 0.75);
+  border-color: var(--primary);
+  box-shadow: var(--ring), inset 0 1px 3px hsl(var(--sh-color) / 0.05);
 }
 
 .conv-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .conv-list::-webkit-scrollbar { width: 6px; }
-.conv-list::-webkit-scrollbar-thumb { background: rgba(20, 184, 166, 0.25); border-radius: 3px; }
+.conv-list::-webkit-scrollbar-thumb { background: hsl(var(--sh-color) / 0.2); border-radius: 3px; }
 
+/* 会话项：hover 抬色，active = 暖白面 + 描边 + 微立体（设计稿 .conv-item.active）*/
 .conv-item {
   display: flex;
   width: 100%;
   align-items: center;
   gap: 12px;
-  padding: 10px 10px;
-  border: none;
-  border-radius: 12px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
   background: transparent;
   cursor: pointer;
   text-align: left;
   font: inherit;
-  transition: background 150ms ease;
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.conv-item + .conv-item { margin-top: 2px; }
 .conv-item:hover {
-  background: rgba(20, 184, 166, 0.08);
+  background: var(--surface-2);
 }
 .conv-item.active {
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(251, 146, 60, 0.1));
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--elev-1), var(--inset-top);
 }
 
 .conv-avatar {
@@ -283,11 +296,12 @@ html.dark .search input {
   justify-content: center;
   width: 42px;
   height: 42px;
-  border-radius: 12px;
-  background: var(--nook-gradient-brand);
-  color: #fff;
+  border-radius: 38%;
+  background: var(--grad-primary);
+  color: var(--on-primary);
   font-weight: 700;
-  font-family: var(--nook-font-display);
+  font-family: var(--font-display);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 /* 头像图：圆角随容器，不用 overflow 以免裁掉在线圆点 */
 .conv-avatar img {
@@ -303,11 +317,11 @@ html.dark .search input {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #10b981;
-  border: 2px solid var(--nook-surface);
+  background: var(--success);
+  border: 2px solid var(--surface);
 }
 .conv-avatar[data-type='2'] {
-  background: linear-gradient(135deg, #5eead4, #fbbf24);
+  background: var(--grad-accent);
 }
 
 .conv-body {
@@ -333,8 +347,8 @@ html.dark .search input {
   flex: 0 1 auto;
   min-width: 0;
   font-weight: 600;
-  font-size: 14px;
-  color: var(--nook-text);
+  font-size: var(--t-md);
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -343,21 +357,22 @@ html.dark .search input {
   flex-shrink: 0;
   font-weight: 400;
   font-size: 12px;
-  color: var(--nook-text-muted);
+  color: var(--ink-3);
 }
 .conv-time {
-  font-size: 11.5px;
-  color: var(--nook-text-muted);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 .conv-msg {
   flex: 1;
-  font-size: 12.5px;
-  color: var(--nook-text-muted);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 未读角标（设计稿 .badge）：暖橙渐变 */
 .conv-unread {
   flex-shrink: 0;
   display: inline-flex;
@@ -365,12 +380,14 @@ html.dark .search input {
   justify-content: center;
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: var(--nook-accent-deep);
+  background: var(--grad-accent);
   color: #fff;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--elev-1);
 }
 
 .room-pane {
@@ -388,14 +405,13 @@ html.dark .search input {
   gap: 10px;
   color: var(--nook-text-muted);
 }
-.room-empty img {
-  border-radius: 16px;
-  box-shadow: 0 20px 40px -16px rgba(15, 118, 110, 0.4);
+.room-empty :deep(.nook-logo) {
   margin-bottom: 6px;
 }
 .room-empty p {
   margin: 0;
   font-size: 14px;
+  color: var(--ink-2);
 }
 .room-empty .hint {
   font-family: var(--nook-font-display);

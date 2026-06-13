@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 
@@ -51,14 +51,14 @@ http.interceptors.response.use(
       const route = router.currentRoute.value
       if (route.name !== 'login' && route.name !== 'register') {
         router.push({ name: 'login', query: { redirect: route.fullPath } })
-        ElMessage.warning('登录已过期，请重新登录')
+        toast.warning('登录已过期，请重新登录')
       }
       return Promise.reject(makeApiError(code, message))
     }
 
     if (!err.response) {
       // 真正的网络错误（断网、超时、CORS）— 走 toast
-      ElMessage.error(message)
+      toast.error(message)
     }
 
     return Promise.reject(makeApiError(code, message))

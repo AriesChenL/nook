@@ -48,7 +48,7 @@ const html = computed(() => renderMarkdown(props.content))
 .md :deep(a) {
   color: var(--nook-primary-deep);
   text-decoration: none;
-  border-bottom: 1px solid rgba(20, 184, 166, 0.4);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
   transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
 .md :deep(a:hover) { color: var(--nook-accent-deep); border-color: var(--nook-accent); }

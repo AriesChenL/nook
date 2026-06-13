@@ -63,3 +63,5 @@ management:
 logging:
   level:
     com.lynn.nook: DEBUG
+    # 打印每次发往 LLM 的原始请求体 JSON（OpenAIClient 在 DEBUG 级别输出 "OpenAI (streaming) request to {}: {}"）
+    io.agentscope.core.model.OpenAIClient: DEBUG

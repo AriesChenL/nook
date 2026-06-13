@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/composables/useToast'
 import { useAuthStore } from '@/stores/auth'
 import { getMe, listFriends, updateProfile } from '@/api/user'
 import { listConversations, presignUpload, uploadToStorage } from '@/api/im'
 import AvatarCropper from '@/components/AvatarCropper.vue'
+import { useTheme } from '@/composables/useTheme'
+import { usePalette, PALETTES } from '@/composables/usePalette'
 
 const auth = useAuthStore()
+const { isDark, toggleDark } = useTheme()
+const { palette, setPalette } = usePalette()
 
 const form = reactive({
   nickname: auth.user?.nickname ?? auth.user?.username ?? '',
@@ -49,9 +53,9 @@ async function onSave() {
       phone: form.phone || undefined
     })
     if (auth.user) auth.setAuth(auth.token, { ...auth.user, nickname: form.nickname })
-    ElMessage.success('已保存')
+    toast.success('已保存')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '保存失败')
+    toast.error(e?.message ?? '保存失败')
   } finally {
     saving.value = false
   }
@@ -74,11 +78,11 @@ function onAvatarFile(e: Event) {
   input.value = '' // 允许再次选同一文件
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    ElMessage.error('请选择图片文件')
+    toast.error('请选择图片文件')
     return
   }
   if (file.size > 10 * 1024 * 1024) {
-    ElMessage.error('图片不能超过 10MB')
+    toast.error('图片不能超过 10MB')
     return
   }
   if (cropperSrc.value) URL.revokeObjectURL(cropperSrc.value)
@@ -95,9 +99,9 @@ async function onCropped(blob: Blob) {
     await uploadToStorage(presigned.uploadUrl, file)
     await updateProfile({ avatarUrl: presigned.downloadUrl })
     auth.setAvatar(presigned.downloadUrl) // 侧栏/资料页即时更新 + 落本地缓存
-    ElMessage.success('头像已更新')
+    toast.success('头像已更新')
   } catch (e: any) {
-    ElMessage.error(e?.message ?? '头像上传失败')
+    toast.error(e?.message ?? '头像上传失败')
   } finally {
     uploadingAvatar.value = false
     if (cropperSrc.value) {
@@ -173,6 +177,44 @@ async function onCropped(blob: Blob) {
             <span class="k">密码</span><span class="v">已设置 · <a class="link">修改</a></span>
           </div>
         </section>
+
+        <!-- 外观：深色模式 + 11 套配色（柔和拟物） -->
+        <section class="card appearance">
+          <h3>外观</h3>
+          <div class="set-row">
+            <div class="s-tt">
+              <b>深色模式</b>
+              <span>跟随你的心情切换明暗</span>
+            </div>
+            <button
+              class="switch"
+              type="button"
+              role="switch"
+              :aria-checked="isDark"
+              aria-label="深色模式"
+              @click="toggleDark"
+            >
+              <i />
+            </button>
+          </div>
+          <div class="ap-block">
+            <span class="ap-label">配色</span>
+            <div class="ap-grid">
+              <button
+                v-for="p in PALETTES"
+                :key="p.value"
+                type="button"
+                :class="['ap-swatch', { active: palette === p.value }]"
+                :title="p.label"
+                :aria-pressed="palette === p.value"
+                @click="setPalette(p.value)"
+              >
+                <span class="ap-chip" :style="{ background: p.swatch }" aria-hidden="true" />
+                <span class="ap-name">{{ p.label }}</span>
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -190,14 +232,13 @@ async function onCropped(blob: Blob) {
 }
 .head {
   padding: 20px 28px 14px;
-  border-bottom: 1px solid var(--nook-surface-border);
-  background: var(--nook-surface);
-  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .head h2 {
   margin: 0;
-  font-family: var(--nook-font-display);
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: var(--t-2xl);
   font-weight: 700;
   color: var(--nook-text);
 }
@@ -239,28 +280,161 @@ async function onCropped(blob: Blob) {
   color: var(--nook-text);
 }
 
+/* ───── 外观卡片：深色模式开关 + 配色色板 ───── */
+.appearance {
+  grid-column: 1 / -1;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.set-row .s-tt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.set-row .s-tt b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.set-row .s-tt span {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+/* 开关 —— 设计稿 .switch */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.12);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--elev-1), inset 0 1px 0 var(--hi-strong);
+  transition: transform var(--dur) var(--ease-spring);
+}
+.switch[aria-checked='true'] {
+  background: var(--grad-primary);
+  border-color: transparent;
+}
+.switch[aria-checked='true'] i {
+  transform: translateX(18px);
+}
+.switch:focus-visible {
+  box-shadow: var(--ring);
+}
+
+.ap-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.ap-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.ap-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.ap-swatch:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.ap-swatch.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+.ap-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.ap-name {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+@media (max-width: 720px) {
+  .ap-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* 个人 hero（设计稿 .profile-hero）：暖白面 + 浮起阴影 + 右上柔光晕 */
 .hero {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-5);
-  padding: var(--space-6);
-  background:
-    var(--nook-gradient-wash),
-    var(--nook-surface);
+  padding: 28px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-2), var(--inset-top);
+  overflow: hidden;
 }
+.hero::after {
+  content: '';
+  position: absolute;
+  right: -40px;
+  top: -40px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  filter: blur(20px);
+  pointer-events: none;
+  z-index: 0;
+}
+.hero > * { position: relative; z-index: 1; }
 .avatar-big {
   position: relative;
   flex-shrink: 0;
   width: 76px;
   height: 76px;
-  border-radius: var(--r-lg);
+  border-radius: 32%;
   border: none;
   padding: 0;
   overflow: hidden;
   cursor: pointer;
-  background: var(--nook-gradient-brand);
-  color: #fff;
-  box-shadow: 0 14px 30px -10px rgba(15, 118, 110, 0.45);
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .avatar-img {
   width: 100%;
@@ -313,26 +487,28 @@ async function onCropped(blob: Blob) {
 }
 .meta { min-width: 0; }
 .name {
-  font-family: var(--nook-font-display);
-  font-size: 20px;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
   font-weight: 700;
-  color: var(--nook-text);
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 .id {
-  font-size: 12.5px;
-  color: var(--nook-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
   margin: 2px 0 10px;
 }
 .stats {
   display: flex;
   gap: 18px;
   font-size: 13px;
-  color: var(--nook-text-muted);
+  color: var(--ink-2);
 }
 .stats strong {
-  font-family: var(--nook-font-display);
-  font-size: 16px;
-  color: var(--nook-text);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  color: var(--ink);
   margin-right: 4px;
 }
 
@@ -343,30 +519,30 @@ async function onCropped(blob: Blob) {
   margin-bottom: 14px;
 }
 .field label {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--nook-text-muted);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink);
 }
 .field input,
 .field textarea {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--nook-surface-border);
-  background: rgba(255, 255, 255, 0.55);
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
   font: inherit;
-  font-size: 14px;
-  color: var(--nook-text);
+  font-size: var(--t-base);
+  color: var(--ink);
   outline: none;
   resize: vertical;
-  transition: border-color 180ms ease;
+  box-shadow: inset 0 1px 3px hsl(var(--sh-color) / 0.07);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
-html.dark .field input,
-html.dark .field textarea {
-  background: rgba(4, 47, 46, 0.45);
-}
+.field input::placeholder,
+.field textarea::placeholder { color: var(--ink-3); }
 .field input:focus,
 .field textarea:focus {
-  border-color: var(--nook-primary);
+  border-color: var(--primary);
+  box-shadow: var(--ring), inset 0 1px 3px hsl(var(--sh-color) / 0.05);
 }
 
 .actions {
@@ -387,25 +563,20 @@ html.dark .field textarea {
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out),
     background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
-/* 对齐侧边栏「选中菜单项」的视觉语言：品牌微渐变 + 深青绿文字 + 细描边 + 柔光 */
+/* 主按钮（设计稿 .btn.primary）：渐变填充 + 顶部高光 + 落地阴影 */
 .btn.primary {
-  background: var(--nook-gradient-wash);
-  color: var(--nook-primary-deep);
-  box-shadow: inset 0 0 0 1px var(--nook-surface-border),
-    0 8px 22px -14px rgba(20, 184, 166, 0.7);
+  background: var(--grad-primary);
+  color: var(--on-primary);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 .btn.primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: inset 0 0 0 1px var(--nook-primary),
-    0 12px 26px -14px rgba(20, 184, 166, 0.8);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255, 255, 255, 0.32);
 }
 .btn.primary:active:not(:disabled) {
-  transform: translateY(0) scale(0.985);
-  box-shadow: inset 0 0 0 1px var(--nook-primary),
-    0 5px 14px -12px rgba(20, 184, 166, 0.7);
-}
-html.dark .btn.primary {
-  color: var(--nook-primary-soft);
+  transform: translateY(0.5px);
+  filter: brightness(0.98);
+  box-shadow: var(--elev-1), inset 0 2px 5px rgba(0, 0, 0, 0.16);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -413,17 +584,17 @@ html.dark .btn.primary {
   display: flex;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid var(--nook-surface-border);
+  border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
 .kv:last-child { border-bottom: none; }
-.k { color: var(--nook-text-muted); }
-.v { color: var(--nook-text); }
+.k { color: var(--ink-2); }
+.v { color: var(--ink); }
 .link {
-  color: var(--nook-primary-deep);
+  color: var(--primary-strong);
+  font-weight: 600;
   cursor: pointer;
   text-decoration: none;
 }
-html.dark .link { color: var(--nook-primary-soft); }
 .link:hover { text-decoration: underline; }
 </style>
