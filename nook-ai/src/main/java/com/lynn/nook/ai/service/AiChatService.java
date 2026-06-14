@@ -11,10 +11,15 @@ import com.lynn.nook.ai.mapper.AiChatSessionMapper;
 import com.lynn.nook.ai.mapper.AiMessageMapper;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import io.agentscope.core.agent.RuntimeContext;
-import io.agentscope.core.event.AgentEventType;
 import io.agentscope.core.event.TextBlockDeltaEvent;
+import io.agentscope.core.event.ThinkingBlockDeltaEvent;
+import io.agentscope.core.event.ToolCallDeltaEvent;
+import io.agentscope.core.event.ToolCallStartEvent;
+import io.agentscope.core.event.ToolResultEndEvent;
+import io.agentscope.core.event.ToolResultTextDeltaEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -26,6 +31,8 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,6 +50,7 @@ public class AiChatService {
     private final AiChatSessionMapper sessionMapper;
     private final AiMessageMapper messageMapper;
     private final AgentRuntimeRegistry registry;
+    private final ObjectMapper objectMapper;
 
     public ChatReplyVO chat(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
@@ -60,8 +68,8 @@ public class AiChatService {
             Msg reply = ha.call(userMsg, ctx).block();
             String text = reply == null ? "" : reply.getTextContent();
             // 落库可见历史：用户消息 + 助手回复（成功才记，失败不污染对话流）
-            persist(sessionId, "user", req.getContent());
-            persist(sessionId, "assistant", text);
+            persist(sessionId, "user", req.getContent(), null);
+            persist(sessionId, "assistant", text, null);  // 非流式无过程
             // 对外返回 session public_id（非数字主键）
             return new ChatReplyVO(session.getPublicId(), text);
         } catch (Exception e) {
@@ -75,15 +83,21 @@ public class AiChatService {
 
     /**
      * 流式对话：用 {@link HarnessAgent#stream} 边生成边把答案增量经 SSE 推给前端。
-     * <p>SSE 事件约定：
+     * <p>SSE 事件约定（让前端看到完整推理过程）：
      * <ul>
-     *   <li>{@code delta} —— {@code {"t":"<增量文本>"}}，逐块拼接成完整回复</li>
-     *   <li>{@code done}  —— {@code {"sessionId":"<会话 public_id>"}}，首轮对话用于把临时会话落到真实 id</li>
-     *   <li>{@code error} —— {@code {"message":"..."}}</li>
+     *   <li>{@code delta}    —— {@code {"t":"<增量文本>"}}，答案 token 增量，逐块拼接成完整回复</li>
+     *   <li>{@code thinking} —— {@code {"id":"<blockId>","t":"<增量文本>"}}，模型思考/推理增量（不落库；id 区分多段思考）</li>
+     *   <li>{@code tool}     —— 工具调用过程，按 {@code phase} 区分：
+     *       {@code call}（{@code {"phase":"call","id":...,"name":...}} 起调）、
+     *       {@code args}（{@code {"phase":"args","id":...,"t":...}} 入参增量）、
+     *       {@code result}（{@code {"phase":"result","id":...,"t":...}} 结果增量）、
+     *       {@code end}（{@code {"phase":"end","id":...}} 结束）；{@code id} 为 toolCallId，前端按其聚合</li>
+     *   <li>{@code done}     —— {@code {"sessionId":"<会话 public_id>","text":"<全文>"}}，首轮用于把临时会话落到真实 id</li>
+     *   <li>{@code error}    —— {@code {"message":"..."}}</li>
      * </ul>
-     * 用 {@link HarnessAgent#streamEvents} 的细粒度事件流（2.0 新 API），只取
-     * {@link AgentEventType#TEXT_BLOCK_DELTA}（答案 token 增量），累积即完整回复，不混入思考/工具事件。
-     * 成功结束后才落库用户消息 + 助手回复，失败不污染历史。
+     * 用 {@link HarnessAgent#streamEvents} 的细粒度事件流（2.0 新 API）：{@code TEXT_BLOCK_DELTA} 累积为完整回复，
+     * 思考 / 工具事件仅透传给前端做过程展示。生命周期 / 模型调用 / start-end 标记等其余事件不外发。
+     * 成功结束后才落库用户消息 + 助手回复（仅答案正文），失败不污染历史。
      */
     public SseEmitter chatStream(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
@@ -100,20 +114,51 @@ public class AiChatService {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         StringBuilder answer = new StringBuilder();  // 累积 TEXT_BLOCK_DELTA = 完整回复
+        List<Map<String, Object>> steps = new ArrayList<>();  // 同步聚合推理过程（思考分段 + 工具调用），结束随回复落库
 
         ha.streamEvents(userMsg, ctx)
                 .publishOn(Schedulers.boundedElastic())  // 下游回调（含阻塞 JDBC 落库 / emitter 发送）切到弹性线程
                 .subscribe(
                         event -> {
-                            // 只取答案文本增量；思考块 / 工具调用 / 起止等事件不推给用户
-                            if (event.getType() != AgentEventType.TEXT_BLOCK_DELTA) return;
-                            String delta = ((TextBlockDeltaEvent) event).getDelta();
-                            if (delta == null || delta.isEmpty()) return;
-                            answer.append(delta);
-                            try {
-                                emitter.send(SseEmitter.event().name("delta").data(Map.of("t", delta)));
-                            } catch (IOException e) {
-                                throw new IllegalStateException("SSE 发送失败（客户端可能已断开）", e);
+                            // 答案增量累积为完整回复（落库）；思考 / 工具事件仅透传做过程展示；其余事件丢弃
+                            switch (event.getType()) {
+                                case TEXT_BLOCK_DELTA -> {
+                                    String delta = ((TextBlockDeltaEvent) event).getDelta();
+                                    if (delta == null || delta.isEmpty()) return;
+                                    answer.append(delta);
+                                    emit(emitter, "delta", Map.of("t", delta));
+                                }
+                                case THINKING_BLOCK_DELTA -> {
+                                    ThinkingBlockDeltaEvent e = (ThinkingBlockDeltaEvent) event;
+                                    String delta = e.getDelta();
+                                    if (delta == null || delta.isEmpty()) return;
+                                    // 带 blockId：前端按其区分多段思考（think → 工具 → think 不被合并）
+                                    emit(emitter, "thinking", Map.of("id", nz(e.getBlockId()), "t", delta));
+                                    appendThink(steps, nz(e.getBlockId()), delta);
+                                }
+                                case TOOL_CALL_START -> {
+                                    ToolCallStartEvent e = (ToolCallStartEvent) event;
+                                    emit(emitter, "tool", Map.of(
+                                            "phase", "call", "id", nz(e.getToolCallId()), "name", nz(e.getToolCallName())));
+                                    addToolStep(steps, nz(e.getToolCallId()), nz(e.getToolCallName()));
+                                }
+                                case TOOL_CALL_DELTA -> {
+                                    ToolCallDeltaEvent e = (ToolCallDeltaEvent) event;
+                                    String delta = e.getDelta();
+                                    if (delta == null || delta.isEmpty()) return;
+                                    emit(emitter, "tool", Map.of("phase", "args", "id", nz(e.getToolCallId()), "t", delta));
+                                    appendToolField(steps, nz(e.getToolCallId()), "args", delta);
+                                }
+                                case TOOL_RESULT_TEXT_DELTA -> {
+                                    ToolResultTextDeltaEvent e = (ToolResultTextDeltaEvent) event;
+                                    String delta = e.getDelta();
+                                    if (delta == null || delta.isEmpty()) return;
+                                    emit(emitter, "tool", Map.of("phase", "result", "id", nz(e.getToolCallId()), "t", delta));
+                                    appendToolField(steps, nz(e.getToolCallId()), "result", delta);
+                                }
+                                case TOOL_RESULT_END ->
+                                        emit(emitter, "tool", Map.of("phase", "end", "id", nz(((ToolResultEndEvent) event).getToolCallId())));
+                                default -> { /* 生命周期 / 模型调用 / start-end 标记等不外发 */ }
                             }
                         },
                         error -> {
@@ -126,8 +171,8 @@ public class AiChatService {
                         },
                         () -> {
                             String text = answer.toString();
-                            persist(sessionId, "user", userContent);
-                            persist(sessionId, "assistant", text);
+                            persist(sessionId, "user", userContent, null);
+                            persist(sessionId, "assistant", text, serializeSteps(steps));
                             try {
                                 emitter.send(SseEmitter.event().name("done")
                                         .data(Map.of("sessionId", session.getPublicId(), "text", text)));
@@ -139,14 +184,86 @@ public class AiChatService {
         return emitter;
     }
 
-    private void persist(Long sessionId, String role, String content) {
+    /** 流式过程中发一帧 SSE；失败（客户端断开）抛出，由 reactor error 通道走 error 回调收尾。 */
+    private static void emit(SseEmitter emitter, String name, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(name).data(data));
+        } catch (IOException e) {
+            throw new IllegalStateException("SSE 发送失败（客户端可能已断开）", e);
+        }
+    }
+
+    /** null → 空串，供 {@link Map#of} 用（其不接受 null value）。 */
+    private static String nz(String s) {
+        return s == null ? "" : s;
+    }
+
+    private void persist(Long sessionId, String role, String content, String trace) {
         AiMessage m = new AiMessage();
         m.setPublicId(UUID.randomUUID().toString());
         m.setSessionId(sessionId);
         m.setRole(role);
         m.setContent(content == null ? "" : content);
+        m.setTrace(trace);
         m.setCreatedAt(OffsetDateTime.now());
         messageMapper.insert(m);
+    }
+
+    /** steps 空 → null（不存噪声）；序列化失败降级为 null，不阻断回复落库。前后端 step 结构需一致。 */
+    private String serializeSteps(List<Map<String, Object>> steps) {
+        if (steps.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(steps);
+        } catch (Exception e) {
+            log.warn("序列化推理过程失败 steps={}", steps.size(), e);
+            return null;
+        }
+    }
+
+    // ── 推理过程聚合（与前端 AiView 逻辑对齐，保证落库与实时展示同形）──
+
+    /** 思考增量：末步仍是同段思考（同 blockId 或上游未给 id）则续写，否则另起一段。 */
+    private static void appendThink(List<Map<String, Object>> steps, String id, String delta) {
+        Map<String, Object> last = steps.isEmpty() ? null : steps.get(steps.size() - 1);
+        if (last != null && "think".equals(last.get("kind")) && (id.isEmpty() || id.equals(last.get("id")))) {
+            last.put("text", (String) last.get("text") + delta);
+            return;
+        }
+        Map<String, Object> step = new HashMap<>();
+        step.put("kind", "think");
+        step.put("id", id);
+        step.put("text", delta);
+        steps.add(step);
+    }
+
+    /** 工具起调：每次 TOOL_CALL_START 都新开一步（同名 / 空 id 也不合并）。 */
+    private static void addToolStep(List<Map<String, Object>> steps, String id, String name) {
+        Map<String, Object> step = new HashMap<>();
+        step.put("kind", "tool");
+        step.put("id", id);
+        step.put("name", name.isEmpty() ? "工具" : name);
+        step.put("args", "");
+        step.put("result", "");
+        steps.add(step);
+    }
+
+    /** 工具入参 / 结果增量：归到匹配 id 的最近工具步（id 空则落到最后一个工具步）；无则兜底补一步。 */
+    private static void appendToolField(List<Map<String, Object>> steps, String id, String field, String delta) {
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            Map<String, Object> s = steps.get(i);
+            if ("tool".equals(s.get("kind")) && (id.isEmpty() || id.equals(s.get("id")))) {
+                s.put(field, (String) s.get(field) + delta);
+                return;
+            }
+        }
+        Map<String, Object> step = new HashMap<>();
+        step.put("kind", "tool");
+        step.put("id", id);
+        step.put("name", "工具");
+        step.put("args", "");
+        step.put("result", "");
+        step.put(field, delta);
+        steps.add(step);
     }
 
     /**

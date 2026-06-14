@@ -35,6 +35,7 @@ export interface ChatMessage {
   id: string // 消息 public_id
   role: 'user' | 'assistant'
   content: string
+  trace?: string // assistant 推理过程 steps 的 JSON（思考分段 + 工具调用）；前端解析后还原
   createdAt?: string
 }
 
@@ -143,8 +144,18 @@ export async function chat(agentId: string, content: string, sessionId?: string)
 }
 
 // ───── 流式对话（SSE：边生成边推增量）─────
+// 工具调用过程事件：按 id 聚合（call 起调带 name，args/result 为增量，end 结束）
+export interface ToolStreamEvent {
+  phase: 'call' | 'args' | 'result' | 'end'
+  id: string
+  name?: string // phase=call 时带工具名
+  t?: string // phase=args/result 时带增量文本
+}
+
 export interface ChatStreamHandlers {
   onDelta: (text: string) => void // 收到一段答案增量
+  onThinking?: (id: string, text: string) => void // 模型思考增量（id=blockId，区分多段思考）
+  onTool?: (ev: ToolStreamEvent) => void // 工具调用过程
   onDone: (sessionId: string, text: string) => void // 生成结束：回传会话 public_id + 权威全文（用于校正）
   onError: (message: string) => void // 服务端 error 事件
 }
@@ -214,13 +225,29 @@ function dispatchSseFrame(frame: string, handlers: ChatStreamHandlers) {
     else if (line.startsWith('data:')) data += line.slice(5).trim()
   }
   if (!data) return
-  let payload: { t?: string; sessionId?: string; text?: string; message?: string }
+  let payload: {
+    t?: string
+    sessionId?: string
+    text?: string
+    message?: string
+    phase?: string
+    id?: string
+    name?: string
+  }
   try {
     payload = JSON.parse(data)
   } catch {
     return
   }
   if (event === 'delta') handlers.onDelta(payload.t ?? '')
+  else if (event === 'thinking') handlers.onThinking?.(payload.id ?? '', payload.t ?? '')
+  else if (event === 'tool')
+    handlers.onTool?.({
+      phase: (payload.phase as ToolStreamEvent['phase']) ?? 'end',
+      id: payload.id ?? '',
+      name: payload.name,
+      t: payload.t
+    })
   else if (event === 'done') handlers.onDone(payload.sessionId ?? '', payload.text ?? '')
   else if (event === 'error') handlers.onError(payload.message ?? 'AI 服务异常')
 }

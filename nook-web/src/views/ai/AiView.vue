@@ -17,10 +17,16 @@ import {
 } from '@/api/ai'
 import MarkdownText from '@/components/MarkdownText.vue'
 
+// 过程步骤：思考段与工具调用按到达顺序交错排列（think → 工具 → think 不被合并）
+type ThinkStep = { kind: 'think'; id: string; text: string }
+type ToolStep = { kind: 'tool'; id: string; name: string; args: string; result: string }
+type TraceStep = ThinkStep | ToolStep
+
 interface ChatTurn {
   id: number
   role: 'user' | 'assistant'
   content: string
+  steps?: TraceStep[] // 本轮推理过程（有序）
 }
 
 // ───── 状态 ─────
@@ -47,6 +53,17 @@ const turns = computed<ChatTurn[]>(() => turnsBySession[bucketKey.value] ?? [])
 
 function avatarText(name: string): string {
   return (name?.[0] ?? 'A').toUpperCase()
+}
+
+// 历史消息里的 trace（steps JSON）解析回过程步骤；坏数据降级为无过程，不影响正文展示
+function parseTrace(trace?: string): TraceStep[] | undefined {
+  if (!trace) return undefined
+  try {
+    const arr = JSON.parse(trace)
+    return Array.isArray(arr) ? (arr as TraceStep[]) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 async function scrollBottom() {
@@ -90,7 +107,12 @@ async function selectAgent(id: string) {
   if (sid && !turnsBySession[sid]) {
     try {
       const msgs = await listAgentMessages(id)
-      turnsBySession[sid] = msgs.map((m, i) => ({ id: i + 1, role: m.role, content: m.content }))
+      turnsBySession[sid] = msgs.map((m, i) => ({
+        id: i + 1,
+        role: m.role,
+        content: m.content,
+        steps: parseTrace(m.trace)
+      }))
       scrollBottom()
     } catch {
       /* 历史加载失败不阻塞当前会话 */
@@ -109,7 +131,7 @@ async function ask(prompt: string) {
   const bucket = turnsBySession[key]
   const baseId = Date.now()
   bucket.push({ id: baseId, role: 'user', content: prompt })
-  bucket.push({ id: baseId + 1, role: 'assistant', content: '' })
+  bucket.push({ id: baseId + 1, role: 'assistant', content: '', steps: [] })
   const aiIndex = bucket.length - 1
   draft.value = ''
   sending.value = true
@@ -120,6 +142,45 @@ async function ask(prompt: string) {
     await chatStream(agentId, prompt, currentSessionId.value ?? undefined, {
       onDelta: (t) => {
         bucket[aiIndex].content += t
+        scrollBottom()
+      },
+      onThinking: (id, t) => {
+        const steps = (bucket[aiIndex].steps ??= [])
+        const last = steps[steps.length - 1]
+        // 末步仍是同段思考（同 blockId，或上游未给 id）则续写，否则开新一段——
+        // 工具调用插入后再 think 时 last 是 tool，自然另起一段，不与前段合并
+        if (last && last.kind === 'think' && (id === '' || last.id === id)) {
+          last.text += t
+        } else {
+          steps.push({ kind: 'think', id, text: t })
+        }
+        scrollBottom()
+      },
+      onTool: (ev) => {
+        const steps = (bucket[aiIndex].steps ??= [])
+        // call 起调：每次 TOOL_CALL_START 都是一次独立调用，总是新开一步——
+        // 不靠 toolCallId 去重，故同名工具多次调用、甚至 id 为空也不会被合并
+        if (ev.phase === 'call') {
+          steps.push({ kind: 'tool', id: ev.id, name: ev.name ?? '工具', args: '', result: '' })
+          scrollBottom()
+          return
+        }
+        // args/result 归位：优先按 id 匹配最近的工具步；id 为空则落到最后一个工具步
+        let tc: ToolStep | undefined
+        for (let i = steps.length - 1; i >= 0; i--) {
+          const s = steps[i]
+          if (s.kind === 'tool' && (ev.id === '' || s.id === ev.id)) {
+            tc = s
+            break
+          }
+        }
+        if (!tc) {
+          // 没有 call 先导（理论少见）：兜底补一步
+          tc = { kind: 'tool', id: ev.id, name: '工具', args: '', result: '' }
+          steps.push(tc)
+        }
+        if (ev.phase === 'args') tc.args += ev.t ?? ''
+        else if (ev.phase === 'result') tc.result += ev.t ?? ''
         scrollBottom()
       },
       onDone: (sid, text) => {
@@ -323,11 +384,31 @@ onMounted(() => loadAgents())
             <div v-for="t in turns" :key="t.id" :class="['turn', t.role]">
               <span class="role-tag">{{ t.role === 'user' ? '我' : currentAgent.name }}</span>
               <div class="bubble">
+                <!-- 过程展示：思考 + 工具调用，按到达顺序交错（仅 assistant） -->
+                <template v-if="t.role === 'assistant'">
+                  <template v-for="(s, i) in t.steps" :key="i">
+                    <details v-if="s.kind === 'think'" class="trace trace-think" open>
+                      <summary>💭 思考过程</summary>
+                      <div class="trace-section"><MarkdownText :content="s.text" /></div>
+                    </details>
+                    <details v-else class="trace trace-tool" open>
+                      <summary>🔧 调用工具 · {{ s.name }}</summary>
+                      <div v-if="s.args" class="trace-section">
+                        <span class="trace-label">参数</span>
+                        <pre class="trace-pre">{{ s.args }}</pre>
+                      </div>
+                      <div v-if="s.result" class="trace-section">
+                        <span class="trace-label">结果</span>
+                        <pre class="trace-pre">{{ s.result }}</pre>
+                      </div>
+                    </details>
+                  </template>
+                </template>
                 <template v-if="t.content">
                   <MarkdownText v-if="t.role === 'assistant'" :content="t.content" />
                   <pre v-else class="user-text">{{ t.content }}</pre>
                 </template>
-                <span v-else class="typing"><i /><i /><i /></span>
+                <span v-else-if="!(t.steps && t.steps.length)" class="typing"><i /><i /><i /></span>
               </div>
             </div>
           </div>
@@ -705,6 +786,38 @@ onMounted(() => loadAgents())
   box-shadow: var(--elev-1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .bubble pre { margin: 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; color: inherit; white-space: pre-wrap; word-break: break-word; }
+
+/* 推理过程：思考 + 工具调用，气泡内可折叠 */
+.trace {
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  font-size: 13px;
+  overflow: hidden;
+}
+.trace > summary {
+  cursor: pointer;
+  padding: 7px 11px;
+  list-style: none;
+  color: var(--ink-2);
+  font-weight: 500;
+  user-select: none;
+}
+.trace > summary::-webkit-details-marker { display: none; }
+.trace[open] > summary { border-bottom: 1px solid var(--line); }
+.trace-section { padding: 9px 11px; }
+.trace-section + .trace-section { border-top: 1px dashed var(--line); }
+.trace-label { display: block; font-size: 11px; color: var(--ink-3); margin-bottom: 4px; letter-spacing: 0.04em; }
+.bubble .trace-pre {
+  margin: 0;
+  font-family: var(--font-mono, var(--font-sans));
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .typing { display: inline-flex; gap: 4px; align-items: center; }
 .typing i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1s infinite ease-in-out; }

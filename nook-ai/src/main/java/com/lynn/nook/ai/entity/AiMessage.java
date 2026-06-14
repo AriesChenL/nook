@@ -31,6 +31,9 @@ public class AiMessage {
 
     private String content;
 
+    /** assistant 推理过程的 steps JSON（思考分段 + 工具调用）；user 行为 null。 */
+    private String trace;
+
     @Column("created_at")
     private OffsetDateTime createdAt;
 }

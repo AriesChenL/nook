@@ -16,9 +16,11 @@ public class ChatMessageVO {
     /** user | assistant */
     private String role;
     private String content;
+    /** assistant 推理过程的 steps JSON（思考分段 + 工具调用）；user 为 null。前端解析后还原过程展示。 */
+    private String trace;
     private OffsetDateTime createdAt;
 
     public static ChatMessageVO from(AiMessage m) {
-        return new ChatMessageVO(m.getPublicId(), m.getRole(), m.getContent(), m.getCreatedAt());
+        return new ChatMessageVO(m.getPublicId(), m.getRole(), m.getContent(), m.getTrace(), m.getCreatedAt());
     }
 }
