@@ -1,6 +1,5 @@
 package com.lynn.nook.ai.service;
 
-import com.lynn.nook.ai.agent.AgentRuntimeRegistry;
 import com.lynn.nook.ai.dto.AgentVO;
 import com.lynn.nook.ai.dto.CreateAgentRequest;
 import com.lynn.nook.ai.entity.AiAgent;
@@ -24,7 +23,6 @@ class AiAgentServiceTest {
 
     @Mock AiAgentMapper agentMapper;
     @Mock AiChatSessionMapper sessionMapper;
-    @Mock AgentRuntimeRegistry registry;
 
     @InjectMocks AiAgentService service;
 
@@ -70,7 +68,7 @@ class AiAgentServiceTest {
     }
 
     @Test
-    void delete_invalidatesRuntime() {
+    void delete_removesAgent() {
         AiAgent a = new AiAgent();
         a.setId(9L);
         a.setOwnerUserId(1L);
@@ -79,6 +77,5 @@ class AiAgentServiceTest {
         service.delete(1L, 9L);
 
         verify(agentMapper).deleteById(9L);
-        verify(registry).invalidate(9L);
     }
 }

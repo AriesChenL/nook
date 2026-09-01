@@ -47,7 +47,7 @@
             <artifactId>spring-cloud-starter-bootstrap</artifactId>
         </dependency>
 
-        <!-- PostgreSQL + MyBatis-Flex（业务表 + agentscope JdbcStore 共用 DataSource） -->
+        <!-- PostgreSQL + MyBatis-Flex（业务表 + agentscope 官方 PG 存储共用 DataSource） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
@@ -78,6 +78,13 @@
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-model-openai</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+        <!-- agentscope 官方 PostgreSQL 存储：PostgresBaseStore（工作区裸对象）+ PostgresAgentStateStore（会话状态），
+             复用 nook-ai 的 DataSource，替代此前手写的 PgBaseStore / StoreBackedSession -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-postgresql</artifactId>
             <version>${agentscope.version}</version>
         </dependency>
 

@@ -1,6 +1,5 @@
 package com.lynn.nook.ai.service;
 
-import com.lynn.nook.ai.agent.AgentRuntimeRegistry;
 import com.lynn.nook.ai.dto.AgentVO;
 import com.lynn.nook.ai.dto.ChatSessionVO;
 import com.lynn.nook.ai.dto.CreateAgentRequest;
@@ -31,7 +30,6 @@ public class AiAgentService {
 
     private final AiAgentMapper agentMapper;
     private final AiChatSessionMapper sessionMapper;
-    private final AgentRuntimeRegistry registry;
 
     public AgentVO create(Long ownerUserId, CreateAgentRequest req) {
         if (req.getName() == null || req.getName().isBlank()) {
@@ -65,29 +63,23 @@ public class AiAgentService {
 
     public AgentVO update(Long ownerUserId, Long agentId, UpdateAgentRequest req) {
         AiAgent a = requireOwned(ownerUserId, agentId);
-        boolean personaChanged = false;
         if (req.getName() != null && !req.getName().isBlank()) {
             a.setName(req.getName().trim());
         }
         if (req.getPersona() != null) {
-            a.setPersona(req.getPersona());
-            personaChanged = true;
+            a.setPersona(req.getPersona());   // 下一轮对话即经 PersonaMiddleware 生效，无需重建运行时
         }
         if (req.getAvatarUrl() != null) {
             a.setAvatarUrl(req.getAvatarUrl());
         }
         a.setUpdatedAt(OffsetDateTime.now());
         agentMapper.update(a);
-        if (personaChanged) {
-            registry.invalidate(a.getId()); // 人格变更 → 重建运行时（sysPrompt 变了）
-        }
         return AgentVO.from(a);
     }
 
     public void delete(Long ownerUserId, Long agentId) {
         requireOwned(ownerUserId, agentId);
         agentMapper.deleteById(agentId);
-        registry.invalidate(agentId);
     }
 
     /** agent public_id → 数字主键 id；解析不到抛资源不存在。 */

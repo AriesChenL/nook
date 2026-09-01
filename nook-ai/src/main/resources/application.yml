@@ -5,9 +5,9 @@ spring:
   application:
     name: nook-ai
 
-  # 运行时加载本地密钥文件（properties 格式，如 DEEPSEEK_API_KEY=sk-xxx）。
-  # optional: 文件不存在不报错；两条覆盖「工作目录=模块目录(spring-boot:run/IDE)」与「工作目录=仓库根」两种启动方式。
-  # .env 已在根 .gitignore 中忽略，不会提交；模板见 nook-ai/.env.example。
+  # 本地密钥文件（properties 格式，如 DEEPSEEK_API_KEY=sk-xxx）。optional=不存在不报错；
+  # 两条分别覆盖「工作目录=模块目录」(spring-boot:run / IDE) 与「工作目录=仓库根」两种启动方式。
+  # .env 已被根 .gitignore 忽略；模板见 nook-ai/.env.example。
   config:
     import:
       - optional:file:.env[.properties]
@@ -19,7 +19,7 @@ spring:
     password: nook123
     driver-class-name: org.postgresql.Driver
 
-  # Flyway：迁移脚本在 nook-common 的 classpath:db/migration。
+  # 迁移脚本在 nook-common 的 classpath:db/migration。
   # baseline-on-migrate：已有库(无 history 表)时采纳现状为基线 V1，不重跑建表。
   flyway:
     enabled: true
@@ -36,21 +36,30 @@ spring:
         import-check:
           enabled: false
 
+# ───────────── ORM ─────────────
 mybatis-flex:
   global-config:
     print-banner: false
 
-# DeepSeek：OpenAI 兼容协议，默认 deepseek-v4-flash（1M 上下文）
-deepseek:
-  api-key: ${DEEPSEEK_API_KEY:}
-  base-url: https://api.deepseek.com
-  model: deepseek-v4-flash
-
+# ───────────── nook-ai ─────────────
+# DeepSeek 模型 + agentscope 官方 PG 存储落表位置 + 上下文压缩阈值。代码里不留裸字面量。
+# 本地工作区目录不在此配：用 agentscope 默认 ./.agentscope/workspace（仅索引锚点，内容全部入 PG），
+# 需要时用环境变量 AGENTSCOPE_WORKSPACE 或 -Dagentscope.workspace 覆盖。
 nook:
   ai:
-    # agentscope 临时工作区（仅占位空目录；记忆/会话全部入 PG）
-    workspace-tmp: ${java.io.tmpdir}/nook-ai-workspace
+    deepseek:                       # OpenAI 兼容协议；api-key 走 .env / 环境变量
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com
+      model: deepseek-v4-flash
+    store:                          # agentscope 官方 PG 存储
+      schema: public
+      fs-table: agentscope_fs_store
+      state-table: agentscope_state
+    compaction:
+      trigger-messages: 40
+      keep-messages: 15
 
+# ───────────── 运维 ─────────────
 management:
   endpoints:
     web:
@@ -63,5 +72,5 @@ management:
 logging:
   level:
     com.lynn.nook: DEBUG
-    # 打印每次发往 LLM 的原始请求体 JSON（OpenAIClient 在 DEBUG 级别输出 "OpenAI (streaming) request to {}: {}"）
-    io.agentscope.core.model.OpenAIClient: DEBUG
+    # DEBUG 打印每次发往 LLM 的原始请求体 JSON（OpenAIClient 的 "OpenAI (streaming) request to {}: {}"）
+    io.agentscope.extensions.model.openai: DEBUG

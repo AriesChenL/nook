@@ -1,6 +1,6 @@
 package com.lynn.nook.ai.service;
 
-import com.lynn.nook.ai.agent.AgentRuntimeRegistry;
+import com.lynn.nook.ai.agent.PersonaMiddleware;
 import com.lynn.nook.ai.dto.ChatMessageVO;
 import com.lynn.nook.ai.dto.ChatReplyVO;
 import com.lynn.nook.ai.dto.ChatRequest;
@@ -13,7 +13,6 @@ import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
-import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ThinkingBlockDeltaEvent;
 import io.agentscope.core.event.ToolCallDeltaEvent;
@@ -21,8 +20,8 @@ import io.agentscope.core.event.ToolCallStartEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
 import io.agentscope.core.event.ToolResultTextDeltaEvent;
 import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.MsgRole;
-import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
+import io.agentscope.harness.agent.gateway.channel.chatui.SendOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,8 +37,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * AI 对话：取该 Agent 的 HarnessAgent 运行时，以 owner 为 userId（记忆共享域）、
- * sessionId 为对话线程构造 RuntimeContext，调用并返回回复文本。
+ * AI 对话：取该 Agent 的 {@link ChatUiChannel}（走 agentscope Gateway），以
+ * {@code SendOptions.of(ownerUserId, sessionId)} 标识说话人与对话线程——Gateway 据此做
+ * 会话管理与 per-session 排队，记忆按 owner 跨 Agent 共享。
  */
 @Slf4j
 @Service
@@ -49,7 +49,7 @@ public class AiChatService {
     private final AiAgentService agentService;
     private final AiChatSessionMapper sessionMapper;
     private final AiMessageMapper messageMapper;
-    private final AgentRuntimeRegistry registry;
+    private final ChatUiChannel nookChatChannel;   // 单例，走 agentscope Gateway
     private final ObjectMapper objectMapper;
 
     public ChatReplyVO chat(Long ownerUserId, Long agentId, ChatRequest req) {
@@ -57,15 +57,10 @@ public class AiChatService {
         AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
         Long sessionId = session.getId();
 
-        HarnessAgent ha = registry.get(agent);
-        RuntimeContext ctx = RuntimeContext.builder()
-                .userId(String.valueOf(ownerUserId))   // 记忆按 owner 跨 Agent 共享（内部数字标识，不脱敏）
-                .sessionId("sess-" + sessionId)         // 对话上下文按会话隔离（agentscope 内部标识，仍用数字 id）
-                .build();
-        Msg userMsg = Msg.builder().role(MsgRole.USER).textContent(req.getContent()).build();
+        SendOptions opts = sendOptions(agent, sessionId);
 
         try {
-            Msg reply = ha.call(userMsg, ctx).block();
+            Msg reply = nookChatChannel.send(opts, req.getContent()).block();
             String text = reply == null ? "" : reply.getTextContent();
             // 落库可见历史：用户消息 + 助手回复（成功才记，失败不污染对话流）
             persist(sessionId, "user", req.getContent(), null);
@@ -82,7 +77,7 @@ public class AiChatService {
     private static final long SSE_TIMEOUT_MS = 300_000L;
 
     /**
-     * 流式对话：用 {@link HarnessAgent#stream} 边生成边把答案增量经 SSE 推给前端。
+     * 流式对话：经 {@link ChatUiChannel#sendStream} 边生成边把答案增量经 SSE 推给前端。
      * <p>SSE 事件约定（让前端看到完整推理过程）：
      * <ul>
      *   <li>{@code delta}    —— {@code {"t":"<增量文本>"}}，答案 token 增量，逐块拼接成完整回复</li>
@@ -95,8 +90,9 @@ public class AiChatService {
      *   <li>{@code done}     —— {@code {"sessionId":"<会话 public_id>","text":"<全文>"}}，首轮用于把临时会话落到真实 id</li>
      *   <li>{@code error}    —— {@code {"message":"..."}}</li>
      * </ul>
-     * 用 {@link HarnessAgent#streamEvents} 的细粒度事件流（2.0 新 API）：{@code TEXT_BLOCK_DELTA} 累积为完整回复，
-     * 思考 / 工具事件仅透传给前端做过程展示。生命周期 / 模型调用 / start-end 标记等其余事件不外发。
+     * 用 {@link ChatUiChannel#sendStream} 的细粒度事件流（经 Gateway 路由，等价 streamEvents 但带
+     * 会话管理 + per-session 排队）：{@code TEXT_BLOCK_DELTA} 累积为完整回复，思考 / 工具事件仅透传给
+     * 前端做过程展示。生命周期 / 模型调用 / start-end 标记等其余事件不外发。
      * 成功结束后才落库用户消息 + 助手回复（仅答案正文），失败不污染历史。
      */
     public SseEmitter chatStream(Long ownerUserId, Long agentId, ChatRequest req) {
@@ -105,18 +101,13 @@ public class AiChatService {
         Long sessionId = session.getId();
         String userContent = req.getContent();
 
-        HarnessAgent ha = registry.get(agent);
-        RuntimeContext ctx = RuntimeContext.builder()
-                .userId(String.valueOf(ownerUserId))
-                .sessionId("sess-" + sessionId)
-                .build();
-        Msg userMsg = Msg.builder().role(MsgRole.USER).textContent(userContent).build();
+        SendOptions opts = sendOptions(agent, sessionId);
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         StringBuilder answer = new StringBuilder();  // 累积 TEXT_BLOCK_DELTA = 完整回复
         List<Map<String, Object>> steps = new ArrayList<>();  // 同步聚合推理过程（思考分段 + 工具调用），结束随回复落库
 
-        ha.streamEvents(userMsg, ctx)
+        nookChatChannel.sendStream(opts, userContent)
                 .publishOn(Schedulers.boundedElastic())  // 下游回调（含阻塞 JDBC 落库 / emitter 发送）切到弹性线程
                 .subscribe(
                         event -> {
@@ -196,6 +187,17 @@ public class AiChatService {
     /** null → 空串，供 {@link Map#of} 用（其不接受 null value）。 */
     private static String nz(String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * Gateway 发送选项：owner 作为说话人（记忆共享域）、会话数字主键作为对话线程，
+     * persona 作为当轮属性（由 {@link PersonaMiddleware} 注入系统提示）。
+     * Gateway 据此派生稳定的内部 session id 并做 per-session 排队。均为内部数字标识，不脱敏。
+     */
+    private static SendOptions sendOptions(AiAgent agent, Long sessionId) {
+        return SendOptions.of(String.valueOf(agent.getOwnerUserId()), String.valueOf(sessionId))
+                .withAttribute(PersonaMiddleware.PERSONA_ATTR,
+                        agent.getPersona() == null ? "" : agent.getPersona());
     }
 
     private void persist(Long sessionId, String role, String content, String trace) {

@@ -3,26 +3,23 @@ package com.lynn.nook.ai.config;
 import io.agentscope.core.model.Model;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.extensions.model.openai.compat.deepseek.DeepSeekFormatter;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * DeepSeek 模型装配：OpenAI 兼容协议 + {@link DeepSeekFormatter}。
- * 默认 {@code deepseek-v4-flash}（baseUrl {@code https://api.deepseek.com}，1M 上下文）。
+ * DeepSeek 模型装配：OpenAI 兼容协议 + {@link DeepSeekFormatter}。参数见
+ * {@link NookAiProperties.Deepseek}（{@code nook.ai.deepseek.*}）。
  */
 @Configuration
 public class DeepSeekModelConfig {
 
     @Bean
-    public Model deepSeekModel(
-            @Value("${deepseek.api-key:}") String apiKey,
-            @Value("${deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-            @Value("${deepseek.model:deepseek-v4-flash}") String modelName) {
+    public Model deepSeekModel(NookAiProperties props) {
+        NookAiProperties.Deepseek ds = props.getDeepseek();
         return OpenAIChatModel.builder()
-                .apiKey(apiKey)
-                .baseUrl(baseUrl)
-                .modelName(modelName)
+                .apiKey(ds.getApiKey())
+                .baseUrl(ds.getBaseUrl())
+                .modelName(ds.getModel())
                 .stream(true)
                 .formatter(new DeepSeekFormatter())
                 .build();
