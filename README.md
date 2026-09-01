@@ -71,7 +71,7 @@
 - RabbitMQ（默认关闭，多实例广播时开启）
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
-- AI：agentscope-harness 2.0.0-RC1（HarnessAgent）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
+- AI：agentscope-harness 2.0.2（单例 HarnessAgent + Gateway/Channel）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
 
 **前端（nook-web）**
 - Vue 3.5 · Vite · TypeScript · Pinia · Vue Router
@@ -103,8 +103,9 @@
 ### 🤖 AI 助手（nook-ai）
 - **用户私有 Agent**：每个用户可建多个属于自己的 AI Agent，像好友一样有长期记忆；建/列/改/删，全程 owner 校验
 - **共享长期记忆**：同一 owner 的多个 Agent 经 `SharedMemoryStore` 命名空间装饰器共享 `MEMORY.md`/`memory`，人格（sysPrompt）与对话会话各自独立
-- **只读环境 100% 入 PG**：自实现 `PgBaseStore`（workspace）+ `StoreBackedSession`（对话快照），不依赖任何本地文件/SQLite
-- **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 流式对话（`/ai/agents/{id}/chat/stream`，SSE 推 `HarnessAgent.streamEvents` 的 `TEXT_BLOCK_DELTA` 增量；另留同步 `/chat` 兜底）
+- **只读环境 100% 入 PG**：agentscope 官方 `PostgresBaseStore`（workspace）+ `PostgresAgentStateStore`（对话快照），不依赖任何本地文件/SQLite
+- **单例 + persona 逐轮注入**：全模块一个 HarnessAgent（`sysPrompt` 留空），persona 经 `PersonaMiddleware` 随请求注入系统提示——persona 改动下一轮即生效，无需按 agentId 缓存/重建
+- **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 流式对话（`/ai/agents/{id}/chat/stream`，经 `ChatUiChannel.sendStream` 走 Gateway，带 per-session 排队，SSE 推 `TEXT_BLOCK_DELTA` 增量；另留同步 `/chat` 兜底）
 - **模型**：DeepSeek `deepseek-v4-flash`；API Key 走 `nook-ai/.env`（启动加载，不入库）
 
 ### 🚪 网关（nook-gateway）
@@ -304,8 +305,8 @@ nook/
 
 ## 路线图
 
-- [x] **nook-ai**：agentscope-harness 用户私有 Agent + 共享长期记忆 + 100% 入 PG + DeepSeek
-- [x] **AI 流式对话**：SSE 推 `streamEvents` 的 `TEXT_BLOCK_DELTA` 增量，前端逐字渲染
+- [x] **nook-ai**：agentscope-harness 用户私有 Agent + 共享长期记忆 + 100% 入 PG（官方 PG 存储）+ DeepSeek
+- [x] **AI 流式对话**：经 Gateway/Channel `sendStream` 推 `TEXT_BLOCK_DELTA` 增量，前端逐字渲染
 - [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
 - [ ] **AI 增强**：会话历史接口、memory_search 全文检索
 - [ ] **会话列表去 N+1**：`ConversationVO` 增加 `lastMessageContent`
