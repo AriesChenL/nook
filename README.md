@@ -318,4 +318,6 @@ nook/
 
 ## License
 
-本项目基于 [MIT License](LICENSE) 开源。
+Copyright (c) 2026 AriesChenL
+
+本项目基于 [GNU AGPL-3.0](LICENSE) 开源。任何人可自由使用、修改，但**改动后的版本一旦对外提供（包括作为 SaaS / 网络服务）**，必须以同一协议公开其完整源码。商业闭源使用请另行联系作者授权。
