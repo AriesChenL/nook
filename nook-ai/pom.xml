@@ -73,6 +73,25 @@
             <artifactId>agentscope-harness</artifactId>
             <version>${agentscope.version}</version>
         </dependency>
+        <!-- OpenAI 兼容模型 provider（2.0 起从 core 拆出）：OpenAIChatModel + DeepSeek 等 compat formatter，
+             DeepSeek 走 OpenAI 兼容协议即用此模块 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-openai</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+
+        <!-- agent 工作区对象存储（RustFS，S3 兼容）：S3Config 直接依赖。
+             此前经 agentscope-harness 传递引入，2.0.2 起 harness 不再传递，需显式声明。 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <!-- S3Client 同步 HTTP 实现：JDK 自带 HttpURLConnection，最轻量 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

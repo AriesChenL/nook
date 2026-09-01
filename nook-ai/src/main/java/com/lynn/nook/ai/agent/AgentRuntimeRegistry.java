@@ -2,12 +2,12 @@ package com.lynn.nook.ai.agent;
 
 import com.lynn.nook.ai.entity.AiAgent;
 import io.agentscope.core.model.Model;
-import io.agentscope.core.session.Session;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.spec.RemoteFilesystemSpec;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
-import io.agentscope.harness.agent.store.BaseStore;
+import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,8 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class AgentRuntimeRegistry implements DisposableBean {
 
-    private final BaseStore sharedStore;   // 文件系统用（记忆跨 Agent 共享）
-    private final Session session;         // 会话状态持久化到 PG
+    private final BaseStore sharedStore;        // 文件系统用（记忆跨 Agent 共享）
+    private final AgentStateStore stateStore;   // 会话状态持久化到 PG
     private final Model model;
     private final Path workspaceTmp;
 
@@ -44,7 +44,7 @@ public class AgentRuntimeRegistry implements DisposableBean {
             Model model,
             @Value("${nook.ai.workspace-tmp:${java.io.tmpdir}/nook-ai-workspace}") String workspaceTmp) {
         this.sharedStore = sharedStore;
-        this.session = new StoreBackedSession(agentScopeRawStore);
+        this.stateStore = new StoreBackedSession(agentScopeRawStore);
         this.model = model;
         this.workspaceTmp = Paths.get(workspaceTmp);
         try {
@@ -84,7 +84,7 @@ public class AgentRuntimeRegistry implements DisposableBean {
                 .model(model)
                 .workspace(workspaceTmp)
                 .filesystem(new RemoteFilesystemSpec(sharedStore).isolationScope(IsolationScope.USER))
-                .session(session)
+                .stateStore(stateStore)
                 .compaction(CompactionConfig.builder().triggerMessages(40).keepMessages(15).build())
                 .disableMemoryTools()   // 去掉依赖本地 SQLite MemoryIndex 的 memory_search
                 .disableShellTool()     // 只读环境，无 shell

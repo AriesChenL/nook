@@ -2,8 +2,8 @@ package com.lynn.nook.ai.agent;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.agentscope.harness.agent.store.BaseStore;
-import io.agentscope.harness.agent.store.StoreItem;
+import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
+import io.agentscope.harness.agent.filesystem.remote.store.StoreItem;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -20,8 +20,9 @@ import java.util.Map;
  * <p>本类是在官方 {@code JdbcStore} 尚未发布时按其设计自实现的 PG 版：HarnessAgent 的工作区内容
  * （MEMORY.md / memory/ / sessions JSONL 等）全部经此落表 {@code agentscope_store}，满足
  * 「只读文件系统 / 全量入 PG」。
- * 注：升级到 agentscope 2.0.0-RC1 后官方已提供 {@code io.agentscope.harness.agent.store.jdbc.JdbcStore}，
- * 后续可评估替换本自实现（行为/表结构需对齐验证，暂保留现状）。
+ * 注：agentscope 2.0.2 起官方 {@code agentscope-extensions-postgresql} 提供
+ * {@code io.agentscope.extensions.postgresql.store.PostgresBaseStore}，后续可评估替换本自实现
+ * （表结构不同，切换需迁移 {@code agentscope_store} 存量数据，暂保留现状）。
  *
  * <h2>表结构</h2>
  * <pre>{@code

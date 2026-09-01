@@ -35,8 +35,7 @@
         <nook.version>0.0.1-SNAPSHOT</nook.version>
         <lombok.version>1.18.46</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
-        <spring-ai.version>1.0.0</spring-ai.version>
-        <agentscope.version>2.0.0-RC1</agentscope.version>
+        <agentscope.version>2.0.2</agentscope.version>
         <mybatis-flex.version>1.10.9</mybatis-flex.version>
         <postgresql.version>42.7.4</postgresql.version>
         <spring-cloud.version>2025.0.2</spring-cloud.version>
@@ -67,15 +66,7 @@
                 <scope>import</scope>
             </dependency>
 
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- agentscope-java：HarnessAgent（ReAct + 工作区/记忆/会话）。当前 2.0.0-RC1；
+            <!-- agentscope-java：HarnessAgent（ReAct + 工作区/记忆/会话）。当前 2.0.2（2.0 线最新正式版）；
                  其 BOM 面向 Spring Boot 4 / Spring 7，已被上方 spring-boot-dependencies 锁版覆盖，仅取 agentscope 自身制品 -->
             <dependency>
                 <groupId>io.agentscope</groupId>

@@ -1,7 +1,7 @@
 package com.lynn.nook.ai.agent;
 
-import io.agentscope.harness.agent.store.InMemoryStore;
-import io.agentscope.harness.agent.store.StoreItem;
+import io.agentscope.harness.agent.filesystem.remote.store.InMemoryStore;
+import io.agentscope.harness.agent.filesystem.remote.store.StoreItem;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

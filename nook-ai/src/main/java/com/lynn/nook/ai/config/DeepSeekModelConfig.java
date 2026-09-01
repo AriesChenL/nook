@@ -1,8 +1,8 @@
 package com.lynn.nook.ai.config;
 
-import io.agentscope.core.formatter.openai.DeepSeekFormatter;
 import io.agentscope.core.model.Model;
-import io.agentscope.core.model.OpenAIChatModel;
+import io.agentscope.extensions.model.openai.OpenAIChatModel;
+import io.agentscope.extensions.model.openai.compat.deepseek.DeepSeekFormatter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

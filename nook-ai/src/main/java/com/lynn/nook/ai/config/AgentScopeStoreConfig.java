@@ -2,7 +2,7 @@ package com.lynn.nook.ai.config;
 
 import com.lynn.nook.ai.agent.PgBaseStore;
 import com.lynn.nook.ai.agent.SharedMemoryStore;
-import io.agentscope.harness.agent.store.BaseStore;
+import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;

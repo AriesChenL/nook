@@ -1,7 +1,7 @@
 package com.lynn.nook.ai.agent;
 
-import io.agentscope.harness.agent.store.BaseStore;
-import io.agentscope.harness.agent.store.StoreItem;
+import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
+import io.agentscope.harness.agent.filesystem.remote.store.StoreItem;
 
 import java.util.ArrayList;
 import java.util.List;

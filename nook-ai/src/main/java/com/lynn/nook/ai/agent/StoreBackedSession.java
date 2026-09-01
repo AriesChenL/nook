@@ -1,11 +1,10 @@
 package com.lynn.nook.ai.agent;
 
-import io.agentscope.core.session.Session;
-import io.agentscope.core.state.SessionKey;
+import io.agentscope.core.state.AgentStateStore;
 import io.agentscope.core.state.State;
 import io.agentscope.core.util.JsonUtils;
-import io.agentscope.harness.agent.store.BaseStore;
-import io.agentscope.harness.agent.store.StoreItem;
+import io.agentscope.harness.agent.filesystem.remote.store.BaseStore;
+import io.agentscope.harness.agent.filesystem.remote.store.StoreItem;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,15 +13,19 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 基于 agentscope {@link BaseStore}（PG JdbcStore）的会话状态持久化，替代默认写本地磁盘的
- * {@code WorkspaceSession}，满足「只读文件系统 / 全量入 PG」。
+ * 基于 agentscope {@link BaseStore}（PG）的会话状态持久化，替代默认写本地磁盘的存储，
+ * 满足「只读文件系统 / 全量入 PG」。
+ *
+ * <p>agentscope 2.0.2 起会话状态 SPI 由 {@code Session} 改为 {@link AgentStateStore}：以
+ * {@code (agentId, sessionId, key)} 三元组寻址，不再有 {@code SessionKey} 抽象。此处命名空间
+ * 取 {@code [ai-session, <agentId>, <sessionId>]}，首段非 {@code "agents"}，不会被
+ * {@link SharedMemoryStore} 的记忆归一规则误改；会话状态天然按 (agent, session) 隔离，
+ * 各 Agent / 各对话线程互不干扰。
  *
  * <p>序列化复用 agentscope 官方 {@link JsonUtils#getJsonCodec()}（与框架其它部分一致，
- * 正确处理 State 多态 / Msg 等）。命名空间用 {@code [ai-session, <sessionId>]}，首段非
- * {@code "agents"}，不会被 {@link SharedMemoryStore} 的记忆归一规则误改；会话状态天然按
- * sessionId 隔离，各 Agent / 各对话线程互不干扰。
+ * 正确处理 State 多态 / Msg 等）。
  */
-public class StoreBackedSession implements Session {
+public class StoreBackedSession implements AgentStateStore {
 
     private static final String NS_ROOT = "ai-session";
     private static final String SINGLE = "single"; // 单值 payload 字段
@@ -34,28 +37,28 @@ public class StoreBackedSession implements Session {
         this.store = store;
     }
 
-    private static List<String> ns(SessionKey sessionKey) {
-        return List.of(NS_ROOT, sessionKey.toIdentifier());
+    private static List<String> ns(String agentId, String sessionId) {
+        return List.of(NS_ROOT, agentId, sessionId);
     }
 
     @Override
-    public void save(SessionKey sessionKey, String key, State value) {
+    public void save(String agentId, String sessionId, String key, State value) {
         String json = JsonUtils.getJsonCodec().toJson(value);
-        store.put(ns(sessionKey), key, Map.of(SINGLE, json));
+        store.put(ns(agentId, sessionId), key, Map.of(SINGLE, json));
     }
 
     @Override
-    public void save(SessionKey sessionKey, String key, List<? extends State> values) {
+    public void save(String agentId, String sessionId, String key, List<? extends State> values) {
         List<String> jsons = new ArrayList<>(values.size());
         for (State v : values) {
             jsons.add(JsonUtils.getJsonCodec().toJson(v));
         }
-        store.put(ns(sessionKey), key, Map.of(ITEMS, jsons));
+        store.put(ns(agentId, sessionId), key, Map.of(ITEMS, jsons));
     }
 
     @Override
-    public <T extends State> Optional<T> get(SessionKey sessionKey, String key, Class<T> type) {
-        StoreItem item = store.get(ns(sessionKey), key);
+    public <T extends State> Optional<T> get(String agentId, String sessionId, String key, Class<T> type) {
+        StoreItem item = store.get(ns(agentId, sessionId), key);
         if (item == null) {
             return Optional.empty();
         }
@@ -67,8 +70,8 @@ public class StoreBackedSession implements Session {
     }
 
     @Override
-    public <T extends State> List<T> getList(SessionKey sessionKey, String key, Class<T> itemType) {
-        StoreItem item = store.get(ns(sessionKey), key);
+    public <T extends State> List<T> getList(String agentId, String sessionId, String key, Class<T> itemType) {
+        StoreItem item = store.get(ns(agentId, sessionId), key);
         if (item == null) {
             return List.of();
         }
@@ -86,24 +89,24 @@ public class StoreBackedSession implements Session {
     }
 
     @Override
-    public boolean exists(SessionKey sessionKey) {
-        return !store.search(ns(sessionKey), 1, 0).isEmpty();
+    public boolean exists(String agentId, String sessionId) {
+        return !store.search(ns(agentId, sessionId), 1, 0).isEmpty();
     }
 
     @Override
-    public void delete(SessionKey sessionKey) {
-        for (StoreItem item : store.search(ns(sessionKey), Integer.MAX_VALUE, 0)) {
-            store.delete(ns(sessionKey), item.key());
+    public void delete(String agentId, String sessionId) {
+        for (StoreItem item : store.search(ns(agentId, sessionId), Integer.MAX_VALUE, 0)) {
+            store.delete(ns(agentId, sessionId), item.key());
         }
     }
 
     @Override
-    public void delete(SessionKey sessionKey, String key) {
-        store.delete(ns(sessionKey), key);
+    public void delete(String agentId, String sessionId, String key) {
+        store.delete(ns(agentId, sessionId), key);
     }
 
     @Override
-    public Set<SessionKey> listSessionKeys() {
+    public Set<String> listSessionIds(String agentId) {
         // nook-ai 用 ai_chat_session 业务表管理会话列表；StoreItem 不携带 namespace，无法在此枚举。
         return Set.of();
     }
