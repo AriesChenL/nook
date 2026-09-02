@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Nacos 共享配置
+#   dataId : nook-shared.yml
+#   group  : DEFAULT_GROUP
+#   format : YAML
+#
+# 加载方：nook-auth / nook-gateway
+#   （spring.cloud.nacos.config.shared-configs 里声明，refresh: true 支持热更新）
+#
+# 发布方式（任选其一）：
+#   - Nacos 控制台 → 配置管理 → 新建配置，把本文件内容整段贴入
+#   - openapi: curl -X POST "$NACOS/nacos/v1/cs/configs" \
+#       --data-urlencode "dataId=nook-shared.yml" \
+#       --data-urlencode "group=DEFAULT_GROUP" \
+#       --data-urlencode "type=yaml" \
+#       --data-urlencode "content@docs/nacos/nook-shared.yml"
+# ─────────────────────────────────────────────────────────────────────────────
+
+nook:
+  jwt:
+    # JWT 签名密钥：nook-auth 签发、nook-gateway 校验，两侧必须同源。
+    # 生产务必替换为强随机值（HS256 要求 ≥ 32 字节 / 256 bit），不要沿用仓库里的开发默认值。
+    # 可直接写字面量，或保留 ${NOOK_JWT_SECRET:...} 由 Nacos 所在环境的环境变量注入。
+    secret: ${NOOK_JWT_SECRET:REPLACE-ME-WITH-A-STRONG-RANDOM-SECRET-AT-LEAST-32-BYTES}
+    expire-minutes: 1440

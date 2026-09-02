@@ -20,6 +20,7 @@ interface ConversationVO {
   ownerId?: string // user public_id
   lastMessageId?: string // 消息 public_id
   lastMessageAt?: string
+  lastMessage?: MessageVO // 后端内联的最后一条消息（去 N+1），撤回已按规则脱敏
   memberIds?: string[] // user public_id 列表
   lastReadMsgId?: string // 消息 public_id
   unreadCount?: number
@@ -300,18 +301,12 @@ export async function listConversations(): Promise<Conversation[]> {
     .map((v) => (v.memberIds ?? []).find((id) => id !== me))
     .filter((id): id is string => id != null)
   await resolveUsers(peerIds, true) // 强制刷新，保证列表里的对端昵称/头像与最新一致
-  // 拉每个会话的最后一条消息作为预览（后端会话 VO 不含消息正文）
-  const previews = await Promise.all(
-    vos.map((v) =>
-      v.lastMessageId
-        ? http
-            .get<unknown, MessageVO[]>('/im/messages', { params: { conversationId: v.id, limit: 1 } })
-            .then((arr) => arr[arr.length - 1])
-            .catch(() => undefined)
-        : Promise.resolve(undefined)
-    )
-  )
-  return Promise.all(vos.map((v, i) => mapConversation(v, previews[i])))
+  // 会话 VO 已内联最后一条消息（后端去 N+1）；系统消息里引用的用户名一并解析后再生成预览文案
+  const sysIds = vos
+    .flatMap((v) => (v.lastMessage ? systemUserIds(v.lastMessage) : []))
+    .filter((id) => id && id !== me)
+  if (sysIds.length) await resolveUsers(sysIds)
+  return Promise.all(vos.map((v) => mapConversation(v, v.lastMessage)))
 }
 
 export async function getConversation(id: string): Promise<Conversation> {

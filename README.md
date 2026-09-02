@@ -2,7 +2,7 @@
 
 > 即时通讯（单聊 / 群聊）+ AI 助手 的全栈微服务平台。后端 Spring Boot 微服务，前端 Vue 3 SPA，所有请求统一经网关鉴权后转发。
 
-**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话）已落地，128 个单测全绿，已真实环境端到端验证。
+**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话）已落地，137 个单测全绿，已真实环境端到端验证。
 
 > 🚀 想直接跑起来？看 **[QUICKSTART.md](QUICKSTART.md)**（10 分钟从零启动）。
 
@@ -258,7 +258,7 @@ pnpm dev        # http://localhost:5173
 
 ## 配置说明
 
-- **JWT 密钥**：当前各服务 yml 写死同一个 secret，**生产务必改并统一到 Nacos 共享配置**。
+- **JWT 密钥**：`nook.jwt.secret` 由 Nacos 共享配置 `nook-shared.yml` 提供（`nook-auth` 签发 / `nook-gateway` 校验，同源）。发布内容见 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)。本地未接 Nacos 时回退到两服务 yml 里一致的开发默认值（可用 `NOOK_JWT_SECRET` 环境变量覆盖）；**生产务必在 Nacos 里换成强随机值（≥32 字节）**。
 - **多实例广播**：`nook.im.mq.enabled=true`（默认）时新消息/撤回/在线状态走 RabbitMQ 广播 exchange（每实例一条匿名队列，各收全量）；单机若不想起 broker 可设 `false` 走进程内本地直推。
 - **Nacos 3.x**：需配 `NACOS_AUTH_TOKEN`（base64）等三件套，即使关认证也要给。
 - **PostgreSQL 18+**：数据卷挂载到 `/var/lib/postgresql/data`。
@@ -271,7 +271,7 @@ pnpm dev        # http://localhost:5173
 ## 测试
 
 ```bash
-# 全量单测（128 用例），务必带 JDK 25
+# 全量单测（137 用例），务必带 JDK 25
 JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 # 单模块（带 -am 连依赖一起编，避免用到 .m2 里过期的 nook-common）
@@ -297,6 +297,7 @@ nook/
 ├─ nook-web/        前端 Vue 3
 ├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
 ├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
+├─ docs/nacos/      Nacos 共享配置（nook-shared.yml：JWT 密钥等跨服务项）
 ├─ docker-compose.yml
 └─ nook.bat         基础设施一键启停
 ```
@@ -311,10 +312,10 @@ nook/
 - [x] **AI 流式对话**：经 Gateway/Channel `sendStream` 推 `TEXT_BLOCK_DELTA` 增量，前端逐字渲染
 - [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
 - [ ] **AI 增强**：会话历史接口、memory_search 全文检索
-- [ ] **会话列表去 N+1**：`ConversationVO` 增加 `lastMessageContent`
-- [ ] **在线状态快照**：新连上的用户主动拉取"当前在线好友"
+- [x] **会话列表去 N+1**：`ConversationVO` 内联 `lastMessage`（发送者脱敏 + 撤回屏蔽），前端不再逐会话拉最后一条
+- [x] **在线状态快照**：`GET /im/presence/online` 返回在线好友，前端进页面/每次 WS `ready` 后拉一次对齐（WS 只推跳变）
 - [x] **可观测**：业务服务接入 actuator 健康端点
-- [ ] **JWT 密钥统一**到 Nacos 共享配置
+- [x] **JWT 密钥统一**到 Nacos 共享配置 `nook-shared.yml`（`shared-configs` 加载，本地回退环境变量/默认值）
 - [ ] **离线推送**（APNs / FCM）
 
 ---

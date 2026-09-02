@@ -25,6 +25,11 @@ public class ConversationVO {
     /** 最后一条消息的 public_id。 */
     private String lastMessageId;
     private OffsetDateTime lastMessageAt;
+    /**
+     * 最后一条消息的完整内容（发送者已脱敏为 public_id，撤回消息按 {@link MessageVO} 规则屏蔽原文）。
+     * 会话列表直接带出，前端无需再逐会话拉最后一条（去 N+1）。无消息时为 null。
+     */
+    private MessageVO lastMessage;
     /** 成员的 user public_id 列表。 */
     private List<String> memberIds;
     /** 当前用户在该会话中的角色：1=普通 2=管理员 3=群主（单聊恒为 1） */

@@ -7,6 +7,7 @@ import com.lynn.nook.im.dto.CreateGroupRequest;
 import com.lynn.nook.im.dto.UpdateGroupRequest;
 import com.lynn.nook.im.entity.Conversation;
 import com.lynn.nook.im.entity.ConversationMember;
+import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.ConversationMapper;
 import com.lynn.nook.im.mapper.ConversationMemberMapper;
 import com.lynn.nook.im.mapper.MessageMapper;
@@ -364,5 +365,94 @@ class ConversationServiceTest {
         assertThatThrownBy(() -> service.setMemberRole(1L, 5L, 1L, ConversationMember.ROLE_ADMIN))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.GROUP_PERMISSION_DENIED.getCode());
+    }
+
+    // -------- listMine：会话列表内联最后一条消息（去 N+1） --------
+
+    private Message message(Long id, String publicId, Long senderId, short type, String content) {
+        Message m = new Message();
+        m.setId(id);
+        m.setPublicId(publicId);
+        m.setSenderId(senderId);
+        m.setContentType(type);
+        m.setContent(content);
+        m.setRecalled((short) 0);
+        return m;
+    }
+
+    @Test
+    void listMine_inlinesLastMessageWithMaskedSender() {
+        Conversation c = new Conversation();
+        c.setId(100L);
+        c.setPublicId("conv-100");
+        c.setType(Conversation.TYPE_DIRECT);
+        c.setLastMessageId(500L);
+
+        // 1st selectListByQuery：我的成员行；2nd：会话全体成员
+        when(memberMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER)))
+                .thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER),
+                                     member(100L, 2L, ConversationMember.ROLE_MEMBER)));
+        when(conversationMapper.selectListByIds(List.of(100L))).thenReturn(List.of(c));
+        when(messageMapper.selectListByQuery(any(QueryWrapper.class)))
+                .thenReturn(List.of(message(500L, "msg-500", 2L, Message.TYPE_TEXT, "晚上吃什么")));
+        when(idResolver.userPublicIds(any())).thenReturn(Map.of(1L, "u1", 2L, "u2"));
+
+        List<ConversationVO> list = service.listMine(1L);
+
+        assertThat(list).hasSize(1);
+        ConversationVO vo = list.get(0);
+        assertThat(vo.getLastMessageId()).isEqualTo("msg-500");
+        assertThat(vo.getLastMessage()).isNotNull();
+        assertThat(vo.getLastMessage().getId()).isEqualTo("msg-500");
+        assertThat(vo.getLastMessage().getContent()).isEqualTo("晚上吃什么");
+        assertThat(vo.getLastMessage().getContentType()).isEqualTo(Message.TYPE_TEXT);
+        assertThat(vo.getLastMessage().getSenderId()).isEqualTo("u2");
+        assertThat(vo.getLastMessage().getConversationId()).isEqualTo("conv-100");
+    }
+
+    @Test
+    void listMine_recalledLastMessageHidesContent() {
+        Conversation c = new Conversation();
+        c.setId(100L);
+        c.setPublicId("conv-100");
+        c.setType(Conversation.TYPE_DIRECT);
+        c.setLastMessageId(500L);
+
+        Message recalled = message(500L, "msg-500", 2L, Message.TYPE_TEXT, "原文");
+        recalled.setRecalled((short) 1);
+
+        when(memberMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER)))
+                .thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER),
+                                     member(100L, 2L, ConversationMember.ROLE_MEMBER)));
+        when(conversationMapper.selectListByIds(List.of(100L))).thenReturn(List.of(c));
+        when(messageMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(recalled));
+        when(idResolver.userPublicIds(any())).thenReturn(Map.of(1L, "u1", 2L, "u2"));
+
+        ConversationVO vo = service.listMine(1L).get(0);
+
+        assertThat(vo.getLastMessage()).isNotNull();
+        assertThat(vo.getLastMessage().getRecalled()).isEqualTo((short) 1);
+        assertThat(vo.getLastMessage().getContent()).isNull();
+    }
+
+    @Test
+    void listMine_noMessagesLeavesLastMessageNull() {
+        Conversation c = new Conversation();
+        c.setId(100L);
+        c.setPublicId("conv-100");
+        c.setType(Conversation.TYPE_DIRECT);
+        // 无 lastMessageId
+
+        when(memberMapper.selectListByQuery(any(QueryWrapper.class))).thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER)))
+                .thenReturn(List.of(member(100L, 1L, ConversationMember.ROLE_MEMBER),
+                                     member(100L, 2L, ConversationMember.ROLE_MEMBER)));
+        when(conversationMapper.selectListByIds(List.of(100L))).thenReturn(List.of(c));
+        when(idResolver.userPublicIds(any())).thenReturn(Map.of(1L, "u1", 2L, "u2"));
+
+        ConversationVO vo = service.listMine(1L).get(0);
+
+        assertThat(vo.getLastMessage()).isNull();
+        assertThat(vo.getLastMessageId()).isNull();
+        verify(messageMapper, never()).selectListByQuery(any(QueryWrapper.class));
     }
 }

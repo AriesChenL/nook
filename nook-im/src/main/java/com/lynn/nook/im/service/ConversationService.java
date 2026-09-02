@@ -4,9 +4,11 @@ import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.im.dto.ConversationVO;
 import com.lynn.nook.im.dto.CreateGroupRequest;
+import com.lynn.nook.im.dto.MessageVO;
 import com.lynn.nook.im.dto.UpdateGroupRequest;
 import com.lynn.nook.im.entity.Conversation;
 import com.lynn.nook.im.entity.ConversationMember;
+import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.ConversationMapper;
 import com.lynn.nook.im.mapper.ConversationMemberMapper;
 import com.lynn.nook.im.mapper.MessageMapper;
@@ -87,8 +89,14 @@ public class ConversationService {
                 allMsgIds.add(mm.getLastReadMsgId());
             }
         }
+        // 先批量取 last message / 已读游标对应的消息行，据此把「发消息的人」也纳入脱敏
+        Map<Long, Message> msgById = loadMessages(allMsgIds);
+        for (Message m : msgById.values()) {
+            if (m.getSenderId() != null) allUserIds.add(m.getSenderId());
+        }
         Map<Long, String> userPub = idResolver.userPublicIds(allUserIds);
-        Map<Long, String> msgPub = messagePublicIds(allMsgIds);
+        Map<Long, String> msgPub = new HashMap<>(msgById.size());
+        msgById.forEach((id, m) -> msgPub.put(id, m.getPublicId()));
 
         List<ConversationVO> result = new ArrayList<>(convs.size());
         for (Conversation c : convs) {
@@ -97,6 +105,8 @@ public class ConversationService {
             vo.setMemberIds(memberNumIds.stream().map(userPub::get).toList());
             vo.setOwnerId(c.getOwnerId() == null ? null : userPub.get(c.getOwnerId()));
             vo.setLastMessageId(c.getLastMessageId() == null ? null : msgPub.get(c.getLastMessageId()));
+            vo.setLastMessage(c.getLastMessageId() == null ? null
+                    : toMessageVO(msgById.get(c.getLastMessageId()), c, userPub));
             ConversationMember mm = myMemberByConv.get(c.getId());
             Long lastRead = mm == null || mm.getLastReadMsgId() == null ? 0L : mm.getLastReadMsgId();
             vo.setLastReadMsgId(lastRead > 0 ? msgPub.get(lastRead) : null);
@@ -398,42 +408,57 @@ public class ConversationService {
                 .where("conversation_id = ?", c.getId()));
         List<Long> memberNumIds = ms.stream().map(ConversationMember::getUserId).toList();
 
-        // 数字 user id → public_id（含群主）
+        // 数字 user id → public_id（含群主 + 下面补入 last message 发送者）
         Set<Long> userIds = new LinkedHashSet<>(memberNumIds);
         if (c.getOwnerId() != null) userIds.add(c.getOwnerId());
-        Map<Long, String> userPub = idResolver.userPublicIds(userIds);
 
         ConversationMember mine = ms.stream()
                 .filter(m -> m.getUserId().equals(currentUserId)).findFirst().orElse(null);
         Long lastRead = mine == null || mine.getLastReadMsgId() == null ? 0L : mine.getLastReadMsgId();
 
-        // 消息 id → public_id（lastMessage + 我的已读游标）
+        // 先取消息行（lastMessage + 我的已读游标），据此把发送者也纳入脱敏
         Set<Long> msgIds = new LinkedHashSet<>();
         if (c.getLastMessageId() != null) msgIds.add(c.getLastMessageId());
         if (lastRead > 0) msgIds.add(lastRead);
-        Map<Long, String> msgPub = messagePublicIds(msgIds);
+        Map<Long, Message> msgById = loadMessages(msgIds);
+        for (Message m : msgById.values()) {
+            if (m.getSenderId() != null) userIds.add(m.getSenderId());
+        }
+        Map<Long, String> userPub = idResolver.userPublicIds(userIds);
+        Map<Long, String> msgPub = new HashMap<>(msgById.size());
+        msgById.forEach((id, m) -> msgPub.put(id, m.getPublicId()));
 
         vo.setMemberIds(memberNumIds.stream().map(userPub::get).toList());
         vo.setOwnerId(c.getOwnerId() == null ? null : userPub.get(c.getOwnerId()));
         vo.setLastMessageId(c.getLastMessageId() == null ? null : msgPub.get(c.getLastMessageId()));
+        vo.setLastMessage(c.getLastMessageId() == null ? null
+                : toMessageVO(msgById.get(c.getLastMessageId()), c, userPub));
         vo.setLastReadMsgId(lastRead > 0 ? msgPub.get(lastRead) : null);
         vo.setMyRole(mine == null ? null : mine.getRole());
         vo.setUnreadCount(countUnread(c.getId(), currentUserId, lastRead));
         return vo;
     }
 
-    /** 批量：数字消息 id → public_id 映射（本库 messages 表）。 */
-    private Map<Long, String> messagePublicIds(Set<Long> ids) {
+    /** 批量：数字消息 id → 完整 Message 行（本库 messages 表）。会话列表/详情一次取齐，避免逐条查。 */
+    private Map<Long, Message> loadMessages(Set<Long> ids) {
         if (ids == null || ids.isEmpty()) return Map.of();
         String placeholders = ids.stream().map(x -> "?").collect(Collectors.joining(","));
-        List<com.lynn.nook.im.entity.Message> rows = messageMapper.selectListByQuery(QueryWrapper.create()
-                .select("id", "public_id")
+        List<Message> rows = messageMapper.selectListByQuery(QueryWrapper.create()
                 .where("id in (" + placeholders + ")", ids.toArray()));
-        Map<Long, String> map = new HashMap<>();
-        for (com.lynn.nook.im.entity.Message m : rows) {
-            map.put(m.getId(), m.getPublicId());
+        Map<Long, Message> map = new HashMap<>();
+        for (Message m : rows) {
+            map.put(m.getId(), m);
         }
         return map;
+    }
+
+    /** 组装会话列表用的「最后一条消息」：senderId → public_id，撤回消息按 {@link MessageVO#from} 屏蔽原文。 */
+    private MessageVO toMessageVO(Message m, Conversation c, Map<Long, String> userPub) {
+        if (m == null) return null;
+        MessageVO vo = MessageVO.from(m);
+        vo.setConversationId(c.getPublicId());
+        vo.setSenderId(m.getSenderId() == null ? null : userPub.get(m.getSenderId()));
+        return vo;
     }
 
     /** 获取会话成员 userId 列表（不含会话校验）。 */

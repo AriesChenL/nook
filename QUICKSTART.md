@@ -146,6 +146,7 @@ pnpm dev
 - **AI 对话报错** → 没配 `nook-ai/.env` 的 `DEEPSEEK_API_KEY`，或 key 无效/无余额。
 - **端口被占用** → 8080-8084 / 5173 / 5432 / 6379 / 8848 / 5672 / 15672 / 9000 / 9001 需空闲。
 - **服务连不上 Nacos/DB** → 确认 `docker compose ps` 容器都 Up；nook-auth 要先启动。
+- **登录后请求全 401** → `nook-auth` 与 `nook-gateway` 的 `nook.jwt.secret` 不一致。本地默认值两者已对齐；若在 Nacos 建了 `nook-shared.yml`（`docs/nacos/nook-shared.yml`）就以它为准，两服务都会加载。
 - **多实例消息广播** → 默认 `nook.im.mq.enabled=true` 走 RabbitMQ；单机不想起 broker 可在 `nook-im/application.yml` 设 `false` 走进程内直推。
 
 ---

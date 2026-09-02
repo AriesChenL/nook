@@ -22,6 +22,11 @@ spring:
         file-extension: yml
         import-check:
           enabled: false
+        # 跨服务共享项（JWT 密钥等）统一放 nook-shared.yml，见 docs/nacos/nook-shared.yml
+        shared-configs:
+          - data-id: nook-shared.yml
+            group: DEFAULT_GROUP
+            refresh: true
 
     gateway:
       server:
@@ -63,8 +68,8 @@ spring:
 
 nook:
   jwt:
-    # 必须和 nook-auth 一致
-    secret: change-me-please-this-must-be-at-least-32-bytes-long-secret
+    # 必须和 nook-auth 同源：生产由 Nacos 共享配置 nook-shared.yml 覆盖；本地回退默认值与 nook-auth 保持一致
+    secret: ${NOOK_JWT_SECRET:dev-only-nook-jwt-secret-change-me-at-least-32-bytes-long}
   gateway:
     # 不需要 JWT 校验的路径前缀（注册、登录、健康检查）
     whitelist:
