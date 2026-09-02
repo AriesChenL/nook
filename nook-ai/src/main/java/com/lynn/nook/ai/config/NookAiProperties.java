@@ -16,6 +16,7 @@ public class NookAiProperties {
     private Deepseek deepseek = new Deepseek();
     private Store store = new Store();
     private Compaction compaction = new Compaction();
+    private Quota quota = new Quota();
 
     /** DeepSeek（OpenAI 兼容协议）。api-key 走 .env / 环境变量，不入库。 */
     @Data
@@ -44,5 +45,19 @@ public class NookAiProperties {
         private int triggerMessages = 40;
         /** 压缩后保留的最近消息数。 */
         private int keepMessages = 15;
+    }
+
+    /** 免费版额度限制（付费用户不受限）。权益状态经 nook-pay 查询，查不到时放行不限流。 */
+    @Data
+    public static class Quota {
+        private Free free = new Free();
+
+        @Data
+        public static class Free {
+            /** 免费用户可创建的 Agent 数上限。 */
+            private int maxAgents = 3;
+            /** 免费用户每日可发起的对话轮数上限（自然日，按 ai_message 里 role=user 的行计）。 */
+            private int dailyMessages = 20;
+        }
     }
 }

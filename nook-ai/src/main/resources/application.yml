@@ -58,6 +58,10 @@ nook:
     compaction:
       trigger-messages: 40
       keep-messages: 15
+    quota:                          # 免费版额度（付费用户不受限；权益经 nook-pay 查询，查不到则放行）
+      free:
+        max-agents: 3
+        daily-messages: 20
 
 # ───────────── 运维 ─────────────
 management:

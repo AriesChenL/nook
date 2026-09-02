@@ -2,7 +2,7 @@
 
 > 即时通讯（单聊 / 群聊）+ AI 助手 的全栈微服务平台。后端 Spring Boot 微服务，前端 Vue 3 SPA，所有请求统一经网关鉴权后转发。
 
-**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话）已落地，137 个单测全绿，已真实环境端到端验证。
+**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话 + 免费版额度）+ `nook-pay` Stripe 订阅/权益闭环（含前端订阅页）已落地，161 个单测全绿，已真实环境端到端验证。
 
 > 🚀 想直接跑起来？看 **[QUICKSTART.md](QUICKSTART.md)**（10 分钟从零启动）。
 
@@ -56,7 +56,8 @@
 | `nook-auth` | 认证：注册/登录/登出/改密 + 多端踢出 |
 | `nook-user` | 用户资料 + 好友关系全流程 |
 | `nook-im` | IM：单聊/群聊会话、消息、WebSocket、在线状态、撤回、已读、文件/图片消息（RustFS 直传） |
-| `nook-ai` | AI：用户私有 Agent（agentscope-harness）+ 同 owner 多 Agent 共享长期记忆，100% 入 PG |
+| `nook-ai` | AI：用户私有 Agent（agentscope-harness）+ 同 owner 多 Agent 共享长期记忆，100% 入 PG；免费版额度限制 |
+| `nook-pay` | 支付：Stripe 一次性付款 / 订阅 + Webhook + `GET /pay/internal/entitlement/{userId}` 权益查询 |
 | `nook-web` | 前端 Vue 3 SPA |
 
 ---
@@ -108,6 +109,12 @@
 - **单例 + persona 逐轮注入**：全模块一个 HarnessAgent（`sysPrompt` 留空），persona 经 `PersonaMiddleware` 随请求注入系统提示——persona 改动下一轮即生效，无需按 agentId 缓存/重建
 - **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 流式对话（`/ai/agents/{id}/chat/stream`，经 `ChatUiChannel.sendStream` 走 Gateway，带 per-session 排队，SSE 推 `TEXT_BLOCK_DELTA` 增量；另留同步 `/chat` 兜底）
 - **模型**：DeepSeek `deepseek-v4-flash-0731`（2026-07-31 生产版，agent/推理表现优于旧 preview）；API Key 走 `nook-ai/.env`（启动加载，不入库）
+- **免费版额度**：非付费用户 Agent 数 / 每日对话轮数受限（`nook.ai.quota.free.*`，默认 3 / 20）；权益经 `nook-pay` 的 `GET /pay/internal/entitlement/{userId}` 查询，`active` 即 pro 不限；查询失败时 **fail-open**（放行不限流，不误伤付费用户）
+
+### 💳 支付 & 订阅（nook-pay）
+- **Stripe**：一次性付款 / 订阅 Checkout、Billing Portal；Webhook 验签 → 幂等去重（`stripe_event` 表）→ 落地订单 `PAID` / 订阅状态同步
+- **权益内部接口**：`GET /pay/internal/entitlement/{userId}` → `{plan: free|pro, active, until}`，供 nook-ai 等按套餐限流
+- **前端订阅页**：`/subscription`（个人资料页「会员与订阅」入口）——当前套餐 / 状态 / 续费日；免费用户「升级到 Pro」跳 Checkout，Pro 用户「管理订阅」跳 Billing Portal；`?checkout=success|cancel` 回跳提示。后端 `nook.stripe.successUrl`/`cancelUrl` 需指向 `<web>/subscription?checkout=success|cancel`
 
 ### 🚪 网关（nook-gateway）
 - 路由转发 + JWT 鉴权 + Redis token 校验 + 注入 `X-User-Id` / `X-Username` + CORS + WebSocket `?access_token=` 兼容 + OPTIONS 放行
@@ -239,6 +246,17 @@ pnpm dev        # http://localhost:5173
 | POST | `/ai/agents/{id}/chat/stream` | **流式对话**（SSE）`{sessionId?,content}` → 事件 `delta{t}` / `done{sessionId,text}` / `error{message}`（缺 sessionId 自动建默认会话） |
 | POST | `/ai/agents/{id}/chat` | 同步对话 `{sessionId?,content}` → `{sessionId,reply}`（兜底，非流式） |
 
+> 建 Agent / 发起对话前会校验免费版额度（`4006` Agent 数超限 / `4007` 今日对话次数用完）；付费用户不受限。
+
+### 支付 `/pay/*`
+| Method | Path | 说明 |
+|---|---|---|
+| POST | `/pay/checkout/one-time` · `/pay/checkout/subscription` | 创建 Stripe Checkout，返回跳转地址 |
+| GET | `/pay/subscription` | 当前订阅（无则 `data` 为 null） |
+| POST | `/pay/portal` | 打开 Billing Portal 自助管理订阅 |
+| POST | `/pay/webhook` | Stripe 回调（无 JWT，靠 Stripe 签名校验来源） |
+| GET | `/pay/internal/entitlement/{userId}` | 服务间：查用户权益 `{plan,active,until}`（直连 `lb://nook-pay`，不经网关） |
+
 ---
 
 ## WebSocket 协议
@@ -271,7 +289,7 @@ pnpm dev        # http://localhost:5173
 ## 测试
 
 ```bash
-# 全量单测（137 用例），务必带 JDK 25
+# 全量单测（161 用例），务必带 JDK 25
 JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 # 单模块（带 -am 连依赖一起编，避免用到 .m2 里过期的 nook-common）
@@ -279,7 +297,7 @@ JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 ./mvnw.cmd -pl nook-ai -am test
 ```
 
-覆盖：认证、好友、会话/消息/撤回/已读、群聊管理与权限、系统消息、成员资料聚合、在线状态、多端踢出、事件广播、全局异常、AI 共享记忆命名空间归一与 Agent CRUD/越权。
+覆盖：认证、好友、会话/消息/撤回/已读、会话列表内联最后一条消息、群聊管理与权限、系统消息、成员资料聚合、在线状态与初始快照、多端踢出、事件广播、全局异常、AI 共享记忆命名空间归一与 Agent CRUD/越权、AI 免费版额度校验（含 fail-open）、权益判定、Stripe Webhook 验签/幂等/订阅与一次性付款落地。
 
 ---
 
@@ -293,7 +311,8 @@ nook/
 ├─ nook-auth/       认证
 ├─ nook-user/       用户 + 好友
 ├─ nook-im/         IM（单聊/群聊/WS/在线状态/文件消息）
-├─ nook-ai/         AI（用户私有 Agent + 共享记忆，agentscope-harness）
+├─ nook-ai/         AI（用户私有 Agent + 共享记忆，agentscope-harness）+ 免费版额度
+├─ nook-pay/        支付（Stripe 付款/订阅 + Webhook + 权益内部接口）
 ├─ nook-web/        前端 Vue 3
 ├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
 ├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
@@ -312,6 +331,7 @@ nook/
 - [x] **AI 流式对话**：经 Gateway/Channel `sendStream` 推 `TEXT_BLOCK_DELTA` 增量，前端逐字渲染
 - [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
 - [ ] **AI 增强**：会话历史接口、memory_search 全文检索
+- [x] **nook-pay 权益闭环**：Webhook 测试 + `entitlement` 内部接口 + nook-ai 按套餐限流 + 前端订阅页（`/subscription`）
 - [x] **会话列表去 N+1**：`ConversationVO` 内联 `lastMessage`（发送者脱敏 + 撤回屏蔽），前端不再逐会话拉最后一条
 - [x] **在线状态快照**：`GET /im/presence/online` 返回在线好友，前端进页面/每次 WS `ready` 后拉一次对齐（WS 只推跳变）
 - [x] **可观测**：业务服务接入 actuator 健康端点

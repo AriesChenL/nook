@@ -176,6 +176,10 @@ async function onCropped(blob: Blob) {
           <div class="kv">
             <span class="k">密码</span><span class="v">已设置 · <a class="link">修改</a></span>
           </div>
+          <div class="kv">
+            <span class="k">会员</span>
+            <span class="v"><RouterLink class="link" to="/subscription">会员与订阅</RouterLink></span>
+          </div>
         </section>
 
         <!-- 外观：深色模式 + 11 套配色（柔和拟物） -->

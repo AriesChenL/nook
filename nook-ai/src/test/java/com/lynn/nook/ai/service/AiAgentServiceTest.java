@@ -23,6 +23,7 @@ class AiAgentServiceTest {
 
     @Mock AiAgentMapper agentMapper;
     @Mock AiChatSessionMapper sessionMapper;
+    @Mock QuotaService quotaService;
 
     @InjectMocks AiAgentService service;
 

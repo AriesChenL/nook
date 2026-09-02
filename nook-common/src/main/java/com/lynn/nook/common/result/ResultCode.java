@@ -53,6 +53,8 @@ public enum ResultCode {
     AI_CHAT_SESSION_NOT_FOUND(4003, "AI 对话会话不存在"),
     AI_MODEL_ERROR(4004, "AI 模型调用失败"),
     AI_AGENT_NAME_BLANK(4005, "AI 智能体名称不能为空"),
+    AI_QUOTA_AGENTS_EXCEEDED(4006, "免费版可创建的 AI 智能体数量已达上限，升级后不限"),
+    AI_QUOTA_MESSAGES_EXCEEDED(4007, "今日免费对话次数已用完，升级后不限"),
 
     PAY_PRODUCT_NOT_FOUND(5001, "商品或套餐不存在"),
     PAY_STRIPE_ERROR(5002, "支付渠道调用失败"),

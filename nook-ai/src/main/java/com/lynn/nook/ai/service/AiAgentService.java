@@ -30,11 +30,13 @@ public class AiAgentService {
 
     private final AiAgentMapper agentMapper;
     private final AiChatSessionMapper sessionMapper;
+    private final QuotaService quotaService;
 
     public AgentVO create(Long ownerUserId, CreateAgentRequest req) {
         if (req.getName() == null || req.getName().isBlank()) {
             throw new BusinessException(ResultCode.AI_AGENT_NAME_BLANK);
         }
+        quotaService.checkCanCreateAgent(ownerUserId);
         AiAgent a = new AiAgent();
         a.setPublicId(UUID.randomUUID().toString());
         a.setOwnerUserId(ownerUserId);

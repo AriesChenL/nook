@@ -33,7 +33,8 @@ const router = createRouter({
         },
         { path: 'contacts', name: 'contacts', component: () => import('@/views/contacts/ContactsView.vue') },
         { path: 'ai',       name: 'ai',       component: () => import('@/views/ai/AiView.vue') },
-        { path: 'profile',  name: 'profile',  component: () => import('@/views/ProfileView.vue') }
+        { path: 'profile',  name: 'profile',  component: () => import('@/views/ProfileView.vue') },
+        { path: 'subscription', name: 'subscription', component: () => import('@/views/SubscriptionView.vue') }
       ]
     },
     { path: '/:pathMatch(.*)*', redirect: '/chat' }

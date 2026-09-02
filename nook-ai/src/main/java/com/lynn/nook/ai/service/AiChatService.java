@@ -47,6 +47,7 @@ import java.util.UUID;
 public class AiChatService {
 
     private final AiAgentService agentService;
+    private final QuotaService quotaService;
     private final AiChatSessionMapper sessionMapper;
     private final AiMessageMapper messageMapper;
     private final ChatUiChannel nookChatChannel;   // 单例，走 agentscope Gateway
@@ -54,6 +55,7 @@ public class AiChatService {
 
     public ChatReplyVO chat(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
+        quotaService.checkCanSendMessage(ownerUserId);
         AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
         Long sessionId = session.getId();
 
@@ -97,6 +99,7 @@ public class AiChatService {
      */
     public SseEmitter chatStream(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
+        quotaService.checkCanSendMessage(ownerUserId);
         AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
         Long sessionId = session.getId();
         String userContent = req.getContent();
