@@ -17,75 +17,25 @@
     <dependencies>
         <dependency>
             <groupId>com.lynn</groupId>
-            <artifactId>nook-common</artifactId>
+            <artifactId>nook-starter</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-
-        <!-- Nacos 注册与配置 -->
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-bootstrap</artifactId>
-        </dependency>
-
-        <!-- PostgreSQL + MyBatis-Flex（业务表 + agentscope 官方 PG 存储共用 DataSource） -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.mybatis-flex</groupId>
-            <artifactId>mybatis-flex-processor</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- agentscope HarnessAgent：ReAct 推理 + 工作区/记忆/会话/压缩 Hook -->
+        <!-- agentscope HarnessAgent：ReAct 推理 + 工作区/记忆/会话/压缩 Hook（版本由父 POM dependencyManagement 统一锁） -->
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-harness</artifactId>
-            <version>${agentscope.version}</version>
         </dependency>
         <!-- OpenAI 兼容模型 provider（2.0 起从 core 拆出）：OpenAIChatModel + DeepSeek 等 compat formatter，
              DeepSeek 走 OpenAI 兼容协议即用此模块 -->
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-model-openai</artifactId>
-            <version>${agentscope.version}</version>
         </dependency>
         <!-- agentscope 官方 PostgreSQL 存储：PostgresBaseStore（工作区裸对象）+ PostgresAgentStateStore（会话状态），
              复用 nook-ai 的 DataSource，替代此前手写的 PgBaseStore / StoreBackedSession -->
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-postgresql</artifactId>
-            <version>${agentscope.version}</version>
         </dependency>
 
         <!-- agent 工作区对象存储（RustFS，S3 兼容）：S3Config 直接依赖。

@@ -2,7 +2,7 @@
 
 > 即时通讯（单聊 / 群聊）+ AI 助手 的全栈微服务平台。后端 Spring Boot 微服务，前端 Vue 3 SPA，所有请求统一经网关鉴权后转发。
 
-**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话）已落地，127 个单测全绿，已真实环境端到端验证。
+**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话）已落地，128 个单测全绿，已真实环境端到端验证。
 
 > 🚀 想直接跑起来？看 **[QUICKSTART.md](QUICKSTART.md)**（10 分钟从零启动）。
 
@@ -51,6 +51,7 @@
 | 模块 | 职责 |
 |---|---|
 | `nook-common` | 公共件：`Result` 统一响应、全局异常、JWT 工具、缓存 key、网关 header 常量 |
+| `nook-starter` | 内部平台启动器：5 个业务服务共用依赖（Web/Actuator/校验 + JDBC + MyBatis-Flex + Nacos + nook-common）聚合成一个依赖 |
 | `nook-gateway` | 网关：路由 + JWT 校验 + Redis token 核对 + 注入 `X-User-Id` + CORS + WS token 兼容 |
 | `nook-auth` | 认证：注册/登录/登出/改密 + 多端踢出 |
 | `nook-user` | 用户资料 + 好友关系全流程 |
@@ -270,7 +271,7 @@ pnpm dev        # http://localhost:5173
 ## 测试
 
 ```bash
-# 全量单测（127 用例），务必带 JDK 25
+# 全量单测（128 用例），务必带 JDK 25
 JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 # 单模块（带 -am 连依赖一起编，避免用到 .m2 里过期的 nook-common）
@@ -287,6 +288,7 @@ JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 ```
 nook/
 ├─ nook-common/     公共件
+├─ nook-starter/    内部平台启动器（业务服务共用依赖聚合）
 ├─ nook-gateway/    网关
 ├─ nook-auth/       认证
 ├─ nook-user/       用户 + 好友

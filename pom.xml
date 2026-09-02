@@ -20,6 +20,7 @@
 
     <modules>
         <module>nook-common</module>
+        <module>nook-starter</module>
         <module>nook-gateway</module>
         <module>nook-auth</module>
         <module>nook-user</module>
@@ -32,15 +33,12 @@
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <nook.version>0.0.1-SNAPSHOT</nook.version>
         <lombok.version>1.18.46</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <agentscope.version>2.0.2</agentscope.version>
         <mybatis-flex.version>1.10.9</mybatis-flex.version>
-        <postgresql.version>42.7.4</postgresql.version>
         <spring-cloud.version>2025.0.2</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
-        <hutool.version>5.8.32</hutool.version>
         <aws-sdk.version>2.28.16</aws-sdk.version>
         <stripe.version>29.2.0</stripe.version>
     </properties>
@@ -50,7 +48,12 @@
             <dependency>
                 <groupId>com.lynn</groupId>
                 <artifactId>nook-common</artifactId>
-                <version>${nook.version}</version>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lynn</groupId>
+                <artifactId>nook-starter</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- 重新以 import 优先级声明 Boot 3.5.14 的全部受管版本（Spring / Reactor / Netty 等），
@@ -74,6 +77,22 @@
                 <version>${agentscope.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- agentscope 自身制品：agentscope-dependencies-bom 只管三方传递依赖，不含这些，需在此逐一锁版 -->
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-harness</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-model-openai</artifactId>
+                <version>${agentscope.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-extensions-postgresql</artifactId>
+                <version>${agentscope.version}</version>
             </dependency>
 
             <dependency>
@@ -107,18 +126,6 @@
                 <version>${aws-sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>org.postgresql</groupId>
-                <artifactId>postgresql</artifactId>
-                <version>${postgresql.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>cn.hutool</groupId>
-                <artifactId>hutool-all</artifactId>
-                <version>${hutool.version}</version>
             </dependency>
 
             <!-- Stripe 官方 Java SDK：支付/订阅/Webhook -->
