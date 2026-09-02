@@ -79,10 +79,10 @@ public class UserService {
         UserAccount u = userMapper.selectOneById(userId);
         if (u == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
 
-        if (req.getNickname()  != null) u.setNickname(req.getNickname());
-        if (req.getAvatarUrl() != null) u.setAvatarUrl(req.getAvatarUrl());
-        if (req.getEmail()     != null) u.setEmail(req.getEmail());
-        if (req.getPhone()     != null) u.setPhone(req.getPhone());
+        if (req.nickname()  != null) u.setNickname(req.nickname());
+        if (req.avatarUrl() != null) u.setAvatarUrl(req.avatarUrl());
+        if (req.email()     != null) u.setEmail(req.email());
+        if (req.phone()     != null) u.setPhone(req.phone());
         u.setUpdatedAt(OffsetDateTime.now());
 
         userMapper.update(u);

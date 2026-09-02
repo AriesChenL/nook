@@ -61,9 +61,7 @@ class AuthServiceTest {
     @Test
     void register_rejectsDuplicateUsername() {
         when(userMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(1L);
-        RegisterRequest req = new RegisterRequest();
-        req.setUsername("alice");
-        req.setPassword("secret123");
+        RegisterRequest req = new RegisterRequest("alice", "secret123", null);
 
         assertThatThrownBy(() -> authService.register(req))
                 .isInstanceOf(BusinessException.class)
@@ -79,10 +77,7 @@ class AuthServiceTest {
             return 1;
         }).when(userMapper).insert(any(User.class));
 
-        RegisterRequest req = new RegisterRequest();
-        req.setUsername("alice");
-        req.setPassword("secret123");
-        req.setNickname("Ally");
+        RegisterRequest req = new RegisterRequest("alice", "secret123", "Ally");
 
         Long id = authService.register(req);
 
@@ -102,9 +97,7 @@ class AuthServiceTest {
         doAnswer(inv -> { ((User) inv.getArgument(0)).setId(1L); return 1; })
                 .when(userMapper).insert(any(User.class));
 
-        RegisterRequest req = new RegisterRequest();
-        req.setUsername("bob");
-        req.setPassword("secret123");
+        RegisterRequest req = new RegisterRequest("bob", "secret123", null);
 
         authService.register(req);
 
@@ -118,9 +111,7 @@ class AuthServiceTest {
     @Test
     void login_rejectsUnknownUser() {
         when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(null);
-        LoginRequest req = new LoginRequest();
-        req.setUsername("ghost");
-        req.setPassword("x");
+        LoginRequest req = new LoginRequest("ghost", "x");
 
         assertThatThrownBy(() -> authService.login(req))
                 .isInstanceOf(BusinessException.class)
@@ -134,8 +125,7 @@ class AuthServiceTest {
         u.setPasswordHash("HASH"); u.setStatus((short) 0);
         when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(u);
 
-        LoginRequest req = new LoginRequest();
-        req.setUsername("alice"); req.setPassword("x");
+        LoginRequest req = new LoginRequest("alice", "x");
 
         assertThatThrownBy(() -> authService.login(req))
                 .isInstanceOf(BusinessException.class)
@@ -150,8 +140,7 @@ class AuthServiceTest {
         when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(u);
         when(passwordEncoder.matches("x", "HASH")).thenReturn(false);
 
-        LoginRequest req = new LoginRequest();
-        req.setUsername("alice"); req.setPassword("x");
+        LoginRequest req = new LoginRequest("alice", "x");
 
         assertThatThrownBy(() -> authService.login(req))
                 .isInstanceOf(BusinessException.class)
@@ -166,20 +155,19 @@ class AuthServiceTest {
         when(userMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(u);
         when(passwordEncoder.matches("secret", "HASH")).thenReturn(true);
 
-        LoginRequest req = new LoginRequest();
-        req.setUsername("alice"); req.setPassword("secret");
+        LoginRequest req = new LoginRequest("alice", "secret");
 
         LoginResponse resp = authService.login(req);
 
         // 对外只暴露 public_id（脱敏）；Redis/JWT 内部仍用数字 id
-        assertThat(resp.getUserId()).isEqualTo("pub-7");
-        assertThat(resp.getUsername()).isEqualTo("alice");
-        assertThat(resp.getNickname()).isEqualTo("Ally");
-        assertThat(resp.getToken()).isNotBlank();
-        assertThat(resp.getExpireSeconds()).isEqualTo(60 * 60L);
+        assertThat(resp.userId()).isEqualTo("pub-7");
+        assertThat(resp.username()).isEqualTo("alice");
+        assertThat(resp.nickname()).isEqualTo("Ally");
+        assertThat(resp.token()).isNotBlank();
+        assertThat(resp.expireSeconds()).isEqualTo(60 * 60L);
         verify(valueOps).set(anyString(), eq("7"), any(Duration.class));
         // 新 token 登记进该用户的 token 集合并对齐 TTL
-        verify(setOps).add(eq("nook:auth:user-tokens:7"), eq(resp.getToken()));
+        verify(setOps).add(eq("nook:auth:user-tokens:7"), eq(resp.token()));
         verify(redis).expire(eq("nook:auth:user-tokens:7"), any(Duration.class));
     }
 
@@ -193,8 +181,7 @@ class AuthServiceTest {
         // 该用户此前在两个端登录过
         when(setOps.members("nook:auth:user-tokens:7")).thenReturn(Set.of("old-1", "old-2"));
 
-        LoginRequest req = new LoginRequest();
-        req.setUsername("alice"); req.setPassword("secret");
+        LoginRequest req = new LoginRequest("alice", "secret");
 
         authService.login(req);
 
@@ -238,9 +225,9 @@ class AuthServiceTest {
         MeResponse me = authService.me(1L);
 
         // 对外 id 输出 public_id（脱敏）
-        assertThat(me.getId()).isEqualTo("pub-1");
-        assertThat(me.getUsername()).isEqualTo("alice");
-        assertThat(me.getEmail()).isEqualTo("a@b.c");
+        assertThat(me.id()).isEqualTo("pub-1");
+        assertThat(me.username()).isEqualTo("alice");
+        assertThat(me.email()).isEqualTo("a@b.c");
     }
 
     @Test
@@ -259,8 +246,7 @@ class AuthServiceTest {
         when(userMapper.selectOneById(1L)).thenReturn(u);
         when(passwordEncoder.matches("wrong", "OLD")).thenReturn(false);
 
-        ChangePasswordRequest req = new ChangePasswordRequest();
-        req.setOldPassword("wrong"); req.setNewPassword("newpass1");
+        ChangePasswordRequest req = new ChangePasswordRequest("wrong", "newpass1");
 
         assertThatThrownBy(() -> authService.changePassword(1L, "tk", req))
                 .isInstanceOf(BusinessException.class)
@@ -275,8 +261,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("old", "OLD")).thenReturn(true);
         when(passwordEncoder.matches("old", "OLD")).thenReturn(true); // newPassword 也匹配旧 hash
 
-        ChangePasswordRequest req = new ChangePasswordRequest();
-        req.setOldPassword("old"); req.setNewPassword("old");
+        ChangePasswordRequest req = new ChangePasswordRequest("old", "old");
 
         assertThatThrownBy(() -> authService.changePassword(1L, "tk", req))
                 .isInstanceOf(BusinessException.class)
@@ -291,8 +276,7 @@ class AuthServiceTest {
         when(passwordEncoder.matches("new", "OLD")).thenReturn(false);
         when(passwordEncoder.encode("new")).thenReturn("NEW_HASH");
 
-        ChangePasswordRequest req = new ChangePasswordRequest();
-        req.setOldPassword("old"); req.setNewPassword("new");
+        ChangePasswordRequest req = new ChangePasswordRequest("old", "new");
 
         authService.changePassword(1L, "tk", req);
 

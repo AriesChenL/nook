@@ -40,14 +40,13 @@ public class MemberQueryService {
 
         return rows.stream().map(m -> {
             UserBriefVO p = profiles.get(m.getUserId());
-            return MemberVO.builder()
-                    .userId(p == null ? null : p.getId())
-                    .role(m.getRole())
-                    .joinedAt(m.getJoinedAt())
-                    .username(p == null ? null : p.getUsername())
-                    .nickname(p == null ? null : p.getNickname())
-                    .avatarUrl(p == null ? null : p.getAvatarUrl())
-                    .build();
+            return new MemberVO(
+                    p == null ? null : p.id(),
+                    m.getRole(),
+                    m.getJoinedAt(),
+                    p == null ? null : p.username(),
+                    p == null ? null : p.nickname(),
+                    p == null ? null : p.avatarUrl());
         }).toList();
     }
 }

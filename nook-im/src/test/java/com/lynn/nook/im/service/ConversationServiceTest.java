@@ -73,8 +73,7 @@ class ConversationServiceTest {
 
     @Test
     void createGroup_addsOwnerAndDedupedMembers() {
-        CreateGroupRequest req = new CreateGroupRequest();
-        req.setName("小组");
+        CreateGroupRequest req = new CreateGroupRequest("小组", null, null);
         // 含重复 3L 和创建者 1L；memberIds 已由 controller 解析为数字，单独以参数传入
         List<Long> memberIds = List.of(2L, 3L, 3L, 1L);
 
@@ -228,9 +227,7 @@ class ConversationServiceTest {
         when(conversationMapper.selectOneById(5L)).thenReturn(group(5L, 1L));
         when(memberMapper.selectOneByQuery(any(QueryWrapper.class)))
                 .thenReturn(member(5L, 1L, ConversationMember.ROLE_OWNER));
-        UpdateGroupRequest req = new UpdateGroupRequest();
-        req.setName("新群名");
-        req.setAvatarUrl("http://x/a.png");
+        UpdateGroupRequest req = new UpdateGroupRequest("新群名", "http://x/a.png");
 
         service.updateGroup(1L, 5L, req);
 

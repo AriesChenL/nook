@@ -19,7 +19,7 @@ public interface UserClient {
 
     /**
      * 批量取用户公开资料。入参 ids 为内部<b>数字</b> userId（im 持有数字 sender_id），
-     * 返回的 {@link UserBriefVO#getId()} 是 user 的 <b>public_id 字符串</b>（脱敏对外标识）。
+     * 返回的 {@link UserBriefVO#id()} 是 user 的 <b>public_id 字符串</b>（脱敏对外标识）。
      */
     @GetMapping("/user/batch")
     Result<List<UserBriefVO>> listByIds(@RequestParam("ids") List<Long> ids);

@@ -54,8 +54,8 @@ class UserServiceTest {
         verify(userMapper, times(1)).selectListByQuery(any(QueryWrapper.class));
         // 脱敏：fromPublic 不带 email/phone
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).getEmail()).isNull();
-        assertThat(result.get(0).getPhone()).isNull();
-        assertThat(result.get(0).getUsername()).isEqualTo("alice");
+        assertThat(result.get(0).email()).isNull();
+        assertThat(result.get(0).phone()).isNull();
+        assertThat(result.get(0).username()).isEqualTo("alice");
     }
 }

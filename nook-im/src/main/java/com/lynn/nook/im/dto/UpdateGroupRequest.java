@@ -1,16 +1,17 @@
 package com.lynn.nook.im.dto;
 
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-@Data
-public class UpdateGroupRequest {
+/**
+ * @param name      为空表示不改
+ * @param avatarUrl 为空表示不改
+ */
+public record UpdateGroupRequest(
 
-    /** 为空表示不改 */
-    @Size(max = 128)
-    private String name;
+        @Size(max = 128)
+        String name,
 
-    /** 为空表示不改 */
-    @Size(max = 512)
-    private String avatarUrl;
+        @Size(max = 512)
+        String avatarUrl
+) {
 }

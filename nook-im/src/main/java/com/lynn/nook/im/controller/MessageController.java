@@ -24,7 +24,7 @@ public class MessageController {
     @PostMapping
     public Result<MessageVO> send(@RequestHeader(RequestHeaders.USER_ID) Long userId,
                                   @Valid @RequestBody SendMessageRequest req) {
-        Long conversationId = idResolver.conversationId(req.getConversationId());
+        Long conversationId = idResolver.conversationId(req.conversationId());
         return Result.ok(messageService.send(userId, conversationId, req));
     }
 

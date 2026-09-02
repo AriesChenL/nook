@@ -56,16 +56,16 @@ public class AiChatService {
     public ChatReplyVO chat(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
         quotaService.checkCanSendMessage(ownerUserId);
-        AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
+        AiChatSession session = resolveSession(ownerUserId, agentId, req.sessionId());
         Long sessionId = session.getId();
 
         SendOptions opts = sendOptions(agent, sessionId);
 
         try {
-            Msg reply = nookChatChannel.send(opts, req.getContent()).block();
+            Msg reply = nookChatChannel.send(opts, req.content()).block();
             String text = reply == null ? "" : reply.getTextContent();
             // 落库可见历史：用户消息 + 助手回复（成功才记，失败不污染对话流）
-            persist(sessionId, "user", req.getContent(), null);
+            persist(sessionId, "user", req.content(), null);
             persist(sessionId, "assistant", text, null);  // 非流式无过程
             // 对外返回 session public_id（非数字主键）
             return new ChatReplyVO(session.getPublicId(), text);
@@ -100,9 +100,9 @@ public class AiChatService {
     public SseEmitter chatStream(Long ownerUserId, Long agentId, ChatRequest req) {
         AiAgent agent = agentService.requireOwned(ownerUserId, agentId);
         quotaService.checkCanSendMessage(ownerUserId);
-        AiChatSession session = resolveSession(ownerUserId, agentId, req.getSessionId());
+        AiChatSession session = resolveSession(ownerUserId, agentId, req.sessionId());
         Long sessionId = session.getId();
-        String userContent = req.getContent();
+        String userContent = req.content();
 
         SendOptions opts = sendOptions(agent, sessionId);
 
@@ -115,43 +115,39 @@ public class AiChatService {
                 .subscribe(
                         event -> {
                             // 答案增量累积为完整回复（落库）；思考 / 工具事件仅透传做过程展示；其余事件丢弃
-                            switch (event.getType()) {
-                                case TEXT_BLOCK_DELTA -> {
-                                    String delta = ((TextBlockDeltaEvent) event).getDelta();
+                            switch (event) {
+                                case TextBlockDeltaEvent e -> {
+                                    String delta = e.getDelta();
                                     if (delta == null || delta.isEmpty()) return;
                                     answer.append(delta);
                                     emit(emitter, "delta", Map.of("t", delta));
                                 }
-                                case THINKING_BLOCK_DELTA -> {
-                                    ThinkingBlockDeltaEvent e = (ThinkingBlockDeltaEvent) event;
+                                case ThinkingBlockDeltaEvent e -> {
                                     String delta = e.getDelta();
                                     if (delta == null || delta.isEmpty()) return;
                                     // 带 blockId：前端按其区分多段思考（think → 工具 → think 不被合并）
                                     emit(emitter, "thinking", Map.of("id", nz(e.getBlockId()), "t", delta));
                                     appendThink(steps, nz(e.getBlockId()), delta);
                                 }
-                                case TOOL_CALL_START -> {
-                                    ToolCallStartEvent e = (ToolCallStartEvent) event;
+                                case ToolCallStartEvent e -> {
                                     emit(emitter, "tool", Map.of(
                                             "phase", "call", "id", nz(e.getToolCallId()), "name", nz(e.getToolCallName())));
                                     addToolStep(steps, nz(e.getToolCallId()), nz(e.getToolCallName()));
                                 }
-                                case TOOL_CALL_DELTA -> {
-                                    ToolCallDeltaEvent e = (ToolCallDeltaEvent) event;
+                                case ToolCallDeltaEvent e -> {
                                     String delta = e.getDelta();
                                     if (delta == null || delta.isEmpty()) return;
                                     emit(emitter, "tool", Map.of("phase", "args", "id", nz(e.getToolCallId()), "t", delta));
                                     appendToolField(steps, nz(e.getToolCallId()), "args", delta);
                                 }
-                                case TOOL_RESULT_TEXT_DELTA -> {
-                                    ToolResultTextDeltaEvent e = (ToolResultTextDeltaEvent) event;
+                                case ToolResultTextDeltaEvent e -> {
                                     String delta = e.getDelta();
                                     if (delta == null || delta.isEmpty()) return;
                                     emit(emitter, "tool", Map.of("phase", "result", "id", nz(e.getToolCallId()), "t", delta));
                                     appendToolField(steps, nz(e.getToolCallId()), "result", delta);
                                 }
-                                case TOOL_RESULT_END ->
-                                        emit(emitter, "tool", Map.of("phase", "end", "id", nz(((ToolResultEndEvent) event).getToolCallId())));
+                                case ToolResultEndEvent e ->
+                                        emit(emitter, "tool", Map.of("phase", "end", "id", nz(e.getToolCallId())));
                                 default -> { /* 生命周期 / 模型调用 / start-end 标记等不外发 */ }
                             }
                         },
@@ -229,7 +225,7 @@ public class AiChatService {
 
     /** 思考增量：末步仍是同段思考（同 blockId 或上游未给 id）则续写，否则另起一段。 */
     private static void appendThink(List<Map<String, Object>> steps, String id, String delta) {
-        Map<String, Object> last = steps.isEmpty() ? null : steps.get(steps.size() - 1);
+        Map<String, Object> last = steps.isEmpty() ? null : steps.getLast();
         if (last != null && "think".equals(last.get("kind")) && (id.isEmpty() || id.equals(last.get("id")))) {
             last.put("text", (String) last.get("text") + delta);
             return;
@@ -254,8 +250,7 @@ public class AiChatService {
 
     /** 工具入参 / 结果增量：归到匹配 id 的最近工具步（id 空则落到最后一个工具步）；无则兜底补一步。 */
     private static void appendToolField(List<Map<String, Object>> steps, String id, String field, String delta) {
-        for (int i = steps.size() - 1; i >= 0; i--) {
-            Map<String, Object> s = steps.get(i);
+        for (Map<String, Object> s : steps.reversed()) {
             if ("tool".equals(s.get("kind")) && (id.isEmpty() || id.equals(s.get("id")))) {
                 s.put(field, (String) s.get(field) + delta);
                 return;
@@ -294,7 +289,7 @@ public class AiChatService {
                 .orderBy("id desc")
                 .limit(1);
         List<AiChatSession> existing = sessionMapper.selectListByQuery(qw);
-        return existing.isEmpty() ? null : existing.get(0);
+        return existing.isEmpty() ? null : existing.getFirst();
     }
 
     /**

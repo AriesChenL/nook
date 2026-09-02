@@ -37,14 +37,14 @@ public class MessageService {
 
     @Transactional
     public MessageVO send(Long senderId, Long conversationId, SendMessageRequest req) {
-        short type = req.getContentType() == null ? Message.TYPE_TEXT : req.getContentType();
+        short type = req.contentType() == null ? Message.TYPE_TEXT : req.contentType();
         boolean isFile = type == Message.TYPE_IMAGE || type == Message.TYPE_FILE;
         if (isFile) {
             // 文件消息：必须带下载地址，content 允许为空（用 fileName 兜底）
-            if (req.getFileUrl() == null || req.getFileUrl().isBlank()) {
+            if (req.fileUrl() == null || req.fileUrl().isBlank()) {
                 throw new BusinessException(ResultCode.FILE_META_MISSING);
             }
-        } else if (req.getContent() == null || req.getContent().isBlank()) {
+        } else if (req.content() == null || req.content().isBlank()) {
             throw new BusinessException(ResultCode.MESSAGE_CONTENT_EMPTY);
         }
         conversationService.requireMember(conversationId, senderId);
@@ -55,16 +55,16 @@ public class MessageService {
         m.setSenderId(senderId);
         m.setContentType(type);
         // content 列 NOT NULL：文件消息 content 为空时用文件名兜底（也便于会话列表预览）
-        String content = req.getContent();
+        String content = req.content();
         if (content == null || content.isBlank()) {
-            content = isFile && req.getFileName() != null ? req.getFileName() : "";
+            content = isFile && req.fileName() != null ? req.fileName() : "";
         }
         m.setContent(content);
         if (isFile) {
-            m.setFileUrl(req.getFileUrl());
-            m.setFileName(req.getFileName());
-            m.setFileSize(req.getFileSize());
-            m.setMediaType(req.getMediaType());
+            m.setFileUrl(req.fileUrl());
+            m.setFileName(req.fileName());
+            m.setFileSize(req.fileSize());
+            m.setMediaType(req.mediaType());
         }
         m.setRecalled((short) 0);
         m.setCreatedAt(OffsetDateTime.now());
@@ -73,7 +73,7 @@ public class MessageService {
         conversationService.onMessageSent(conversationId, m.getId(), m.getCreatedAt());
 
         // 脱敏：id=消息 public_id、conversationId=会话 public_id、senderId=发送者 user public_id
-        MessageVO vo = idResolver.toMessageVO(m, req.getConversationId());
+        MessageVO vo = idResolver.toMessageVO(m, req.conversationId());
         NewMessageEvent event = NewMessageEvent.builder()
                 .conversationId(conversationId)
                 .memberUserIds(conversationService.listMemberIds(conversationId))
@@ -126,13 +126,12 @@ public class MessageService {
                 .filter(id -> !id.equals(m.getSenderId()))
                 .count();
         Map<Long, String> readerPub = idResolver.userPublicIds(readers);
-        return ReadStatusVO.builder()
-                .messageId(m.getPublicId())
-                .conversationId(idResolver.conversationPublicId(m.getConversationId()))
-                .totalRecipients(totalRecipients)
-                .readCount(readers.size())
-                .readerUserIds(readers.stream().map(readerPub::get).toList())
-                .build();
+        return new ReadStatusVO(
+                m.getPublicId(),
+                idResolver.conversationPublicId(m.getConversationId()),
+                totalRecipients,
+                readers.size(),
+                readers.stream().map(readerPub::get).toList());
     }
 
     /** 撤回消息：仅发送者本人，且在 RECALL_WINDOW 时间内。 */

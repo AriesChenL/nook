@@ -145,8 +145,8 @@ public class ConversationService {
         Conversation c = new Conversation();
         c.setPublicId(UUID.randomUUID().toString());
         c.setType(Conversation.TYPE_GROUP);
-        c.setName(req.getName());
-        c.setAvatarUrl(req.getAvatarUrl());
+        c.setName(req.name());
+        c.setAvatarUrl(req.avatarUrl());
         c.setOwnerId(ownerId);
         c.setCreatedAt(now);
         c.setUpdatedAt(now);
@@ -220,11 +220,11 @@ public class ConversationService {
     public ConversationVO updateGroup(Long operatorId, Long conversationId, UpdateGroupRequest req) {
         Conversation c = requireGroup(conversationId);
         requireAdminOrOwner(conversationId, operatorId);
-        if (req.getName() != null && !req.getName().isBlank()) {
-            c.setName(req.getName());
+        if (req.name() != null && !req.name().isBlank()) {
+            c.setName(req.name());
         }
-        if (req.getAvatarUrl() != null) {
-            c.setAvatarUrl(req.getAvatarUrl());
+        if (req.avatarUrl() != null) {
+            c.setAvatarUrl(req.avatarUrl());
         }
         touch(c);
         return buildVO(c, operatorId);

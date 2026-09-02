@@ -148,7 +148,7 @@ public class StripeWebhookService {
 
         List<SubscriptionItem> items = sub.getItems() == null ? null : sub.getItems().getData();
         if (items != null && !items.isEmpty()) {
-            SubscriptionItem item = items.get(0);
+            SubscriptionItem item = items.getFirst();
             if (item.getPrice() != null) {
                 row.setPriceId(item.getPrice().getId());
             }

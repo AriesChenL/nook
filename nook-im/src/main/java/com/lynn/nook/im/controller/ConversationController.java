@@ -37,7 +37,7 @@ public class ConversationController {
     @PostMapping("/direct")
     public Result<ConversationVO> direct(@RequestHeader(RequestHeaders.USER_ID) Long userId,
                                          @Valid @RequestBody CreateDirectRequest req) {
-        Long peerId = idResolver.userId(req.getPeerUserId());
+        Long peerId = idResolver.userId(req.peerUserId());
         return Result.ok(conversationService.getOrCreateDirect(userId, peerId));
     }
 
@@ -52,7 +52,7 @@ public class ConversationController {
                              @PathVariable String id,
                              @Valid @RequestBody ReadCursorRequest req) {
         Long convId = idResolver.conversationId(id);
-        Long lastReadMsgId = idResolver.messageId(req.getLastReadMsgId());
+        Long lastReadMsgId = idResolver.messageId(req.lastReadMsgId());
         conversationService.updateReadCursor(userId, convId, lastReadMsgId);
         return Result.ok();
     }
@@ -62,7 +62,7 @@ public class ConversationController {
     @PostMapping("/group")
     public Result<ConversationVO> createGroup(@RequestHeader(RequestHeaders.USER_ID) Long userId,
                                               @Valid @RequestBody CreateGroupRequest req) {
-        List<Long> memberIds = resolveUserPublicIds(req.getMemberIds());
+        List<Long> memberIds = resolveUserPublicIds(req.memberIds());
         return Result.ok(conversationService.createGroup(userId, req, memberIds));
     }
 
@@ -84,7 +84,7 @@ public class ConversationController {
                                              @PathVariable String id,
                                              @Valid @RequestBody AddMembersRequest req) {
         Long convId = idResolver.conversationId(id);
-        List<Long> memberIds = resolveUserPublicIds(req.getMemberIds());
+        List<Long> memberIds = resolveUserPublicIds(req.memberIds());
         return Result.ok(conversationService.addMembers(userId, convId, memberIds));
     }
 
@@ -103,7 +103,7 @@ public class ConversationController {
                                                 @Valid @RequestBody SetMemberRoleRequest req) {
         Long convId = idResolver.conversationId(id);
         Long targetId = idResolver.userId(targetUserId);
-        return Result.ok(conversationService.setMemberRole(userId, convId, targetId, req.getRole()));
+        return Result.ok(conversationService.setMemberRole(userId, convId, targetId, req.role()));
     }
 
     @PostMapping("/{id}/leave")
@@ -118,7 +118,7 @@ public class ConversationController {
                                                 @PathVariable String id,
                                                 @Valid @RequestBody TransferOwnerRequest req) {
         Long convId = idResolver.conversationId(id);
-        Long newOwnerId = idResolver.userId(req.getNewOwnerId());
+        Long newOwnerId = idResolver.userId(req.newOwnerId());
         return Result.ok(conversationService.transferOwner(userId, convId, newOwnerId));
     }
 

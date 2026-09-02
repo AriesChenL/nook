@@ -79,9 +79,7 @@ class MessageServiceTest {
 
     @Test
     void send_rejectsBlankContent() {
-        SendMessageRequest req = new SendMessageRequest();
-        req.setConversationId("c1");
-        req.setContent("   ");
+        SendMessageRequest req = new SendMessageRequest("c1", null, "   ", null, null, null, null);
 
         assertThatThrownBy(() -> messageService.send(10L, 1L, req))
                 .isInstanceOf(BusinessException.class)
@@ -92,10 +90,7 @@ class MessageServiceTest {
 
     @Test
     void send_withoutTransaction_publishesImmediately() {
-        SendMessageRequest req = new SendMessageRequest();
-        req.setConversationId("c7");
-        req.setContent("hello");
-        req.setContentType((short) 1);
+        SendMessageRequest req = new SendMessageRequest("c7", (short) 1, "hello", null, null, null, null);
 
         doAnswer(inv -> {
             ((Message) inv.getArgument(0)).setId(99L);
@@ -130,9 +125,7 @@ class MessageServiceTest {
     void send_withinTransaction_defersPublishUntilAfterCommit() {
         TransactionSynchronizationManager.initSynchronization();
         try {
-            SendMessageRequest req = new SendMessageRequest();
-            req.setConversationId("c1");
-            req.setContent("hi");
+            SendMessageRequest req = new SendMessageRequest("c1", null, "hi", null, null, null, null);
 
             doAnswer(inv -> {
                 ((Message) inv.getArgument(0)).setId(1L);
@@ -157,9 +150,7 @@ class MessageServiceTest {
 
     @Test
     void send_defaultsContentTypeToText() {
-        SendMessageRequest req = new SendMessageRequest();
-        req.setConversationId("c1");
-        req.setContent("x");
+        SendMessageRequest req = new SendMessageRequest("c1", null, "x", null, null, null, null);
 
         doAnswer(inv -> {
             ((Message) inv.getArgument(0)).setId(1L);
@@ -176,9 +167,7 @@ class MessageServiceTest {
 
     @Test
     void send_propagatesMemberCheckFailure() {
-        SendMessageRequest req = new SendMessageRequest();
-        req.setConversationId("c1");
-        req.setContent("x");
+        SendMessageRequest req = new SendMessageRequest("c1", null, "x", null, null, null, null);
         doThrow(new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER))
                 .when(conversationService).requireMember(1L, 5L);
 
@@ -289,11 +278,11 @@ class MessageServiceTest {
         com.lynn.nook.im.dto.ReadStatusVO vo = messageService.readStatus(8L, 50L);
 
         verify(conversationService).requireMember(9L, 8L);
-        assertThat(vo.getMessageId()).isEqualTo("msg-50");
-        assertThat(vo.getConversationId()).isEqualTo("c9");
-        assertThat(vo.getTotalRecipients()).isEqualTo(4);   // 5 成员 - 发送者
-        assertThat(vo.getReadCount()).isEqualTo(2);
-        assertThat(vo.getReaderUserIds()).containsExactly("u2", "u3");
+        assertThat(vo.messageId()).isEqualTo("msg-50");
+        assertThat(vo.conversationId()).isEqualTo("c9");
+        assertThat(vo.totalRecipients()).isEqualTo(4);   // 5 成员 - 发送者
+        assertThat(vo.readCount()).isEqualTo(2);
+        assertThat(vo.readerUserIds()).containsExactly("u2", "u3");
     }
 
     @Test

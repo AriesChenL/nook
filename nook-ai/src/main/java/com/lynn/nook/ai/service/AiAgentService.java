@@ -33,17 +33,17 @@ public class AiAgentService {
     private final QuotaService quotaService;
 
     public AgentVO create(Long ownerUserId, CreateAgentRequest req) {
-        if (req.getName() == null || req.getName().isBlank()) {
+        if (req.name() == null || req.name().isBlank()) {
             throw new BusinessException(ResultCode.AI_AGENT_NAME_BLANK);
         }
         quotaService.checkCanCreateAgent(ownerUserId);
         AiAgent a = new AiAgent();
         a.setPublicId(UUID.randomUUID().toString());
         a.setOwnerUserId(ownerUserId);
-        a.setName(req.getName().trim());
-        a.setPersona(req.getPersona() == null ? "" : req.getPersona());
-        a.setAvatarUrl(req.getAvatarUrl());
-        a.setModelName(blankTo(req.getModelName(), DEFAULT_MODEL));
+        a.setName(req.name().trim());
+        a.setPersona(req.persona() == null ? "" : req.persona());
+        a.setAvatarUrl(req.avatarUrl());
+        a.setModelName(blankTo(req.modelName(), DEFAULT_MODEL));
         a.setStatus((short) 1);
         OffsetDateTime now = OffsetDateTime.now();
         a.setCreatedAt(now);
@@ -65,14 +65,14 @@ public class AiAgentService {
 
     public AgentVO update(Long ownerUserId, Long agentId, UpdateAgentRequest req) {
         AiAgent a = requireOwned(ownerUserId, agentId);
-        if (req.getName() != null && !req.getName().isBlank()) {
-            a.setName(req.getName().trim());
+        if (req.name() != null && !req.name().isBlank()) {
+            a.setName(req.name().trim());
         }
-        if (req.getPersona() != null) {
-            a.setPersona(req.getPersona());   // 下一轮对话即经 PersonaMiddleware 生效，无需重建运行时
+        if (req.persona() != null) {
+            a.setPersona(req.persona());   // 下一轮对话即经 PersonaMiddleware 生效，无需重建运行时
         }
-        if (req.getAvatarUrl() != null) {
-            a.setAvatarUrl(req.getAvatarUrl());
+        if (req.avatarUrl() != null) {
+            a.setAvatarUrl(req.avatarUrl());
         }
         a.setUpdatedAt(OffsetDateTime.now());
         agentMapper.update(a);
@@ -120,7 +120,7 @@ public class AiAgentService {
         s.setPublicId(UUID.randomUUID().toString());
         s.setAgentId(agentId);
         s.setOwnerUserId(ownerUserId);
-        s.setTitle(req == null ? null : req.getTitle());
+        s.setTitle(req == null ? null : req.title());
         OffsetDateTime now = OffsetDateTime.now();
         s.setCreatedAt(now);
         s.setUpdatedAt(now);

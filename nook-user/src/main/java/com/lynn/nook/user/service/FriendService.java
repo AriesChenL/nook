@@ -36,7 +36,7 @@ public class FriendService {
     /** 发送好友申请。入参 toUserId 为目标用户 public_id（脱敏），入口解析回数字主键。 */
     @Transactional
     public FriendRequestVO sendRequest(Long fromUserId, CreateFriendRequest req) {
-        Long toUserId = userService.resolveId(req.getToUserId());
+        Long toUserId = userService.resolveId(req.toUserId());
         if (fromUserId.equals(toUserId)) {
             throw new BusinessException(ResultCode.FRIEND_CANNOT_ADD_SELF);
         }
@@ -59,7 +59,7 @@ public class FriendService {
         r.setPublicId(java.util.UUID.randomUUID().toString());
         r.setFromUserId(fromUserId);
         r.setToUserId(toUserId);
-        r.setMessage(req.getMessage());
+        r.setMessage(req.message());
         r.setStatus(FriendRequest.STATUS_PENDING);
         r.setCreatedAt(OffsetDateTime.now());
         r.setUpdatedAt(OffsetDateTime.now());
@@ -142,11 +142,10 @@ public class FriendService {
 
         Map<Long, UserAccount> users = loadUsers(rows.stream().map(Friendship::getFriendId).toList());
         return rows.stream()
-                .map(f -> FriendVO.builder()
-                        .user(UserVO.fromPublic(users.get(f.getFriendId())))
-                        .remark(f.getRemark())
-                        .createdAt(f.getCreatedAt())
-                        .build())
+                .map(f -> new FriendVO(
+                        UserVO.fromPublic(users.get(f.getFriendId())),
+                        f.getRemark(),
+                        f.getCreatedAt()))
                 .toList();
     }
 

@@ -1,16 +1,15 @@
 package com.lynn.nook.ai.dto;
 
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-@Data
-public class UpdateAgentRequest {
+public record UpdateAgentRequest(
 
-    @Size(max = 64)
-    private String name;
+        @Size(max = 64)
+        String name,
 
-    private String persona;
+        String persona,
 
-    @Size(max = 512)
-    private String avatarUrl;
+        @Size(max = 512)
+        String avatarUrl
+) {
 }

@@ -2,30 +2,31 @@ package com.lynn.nook.im.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-@Data
-public class SendMessageRequest {
+/**
+ * @param conversationId 目标会话的 public_id
+ * @param contentType    1=text 2=image 3=file；缺省为 text
+ * @param content        文本消息正文；文件消息可空（由后端用 fileName 兜底）
+ * @param fileUrl        文件消息（contentType=2/3）：下载/预览地址（预签名上传后由前端回传）
+ */
+public record SendMessageRequest(
 
-    /** 目标会话的 public_id。 */
-    @NotBlank
-    private String conversationId;
+        @NotBlank
+        String conversationId,
 
-    /** 1=text 2=image 3=file；缺省为 text */
-    private Short contentType;
+        Short contentType,
 
-    /** 文本消息正文；文件消息可空（由后端用 fileName 兜底）。 */
-    @Size(max = 8000)
-    private String content;
+        @Size(max = 8000)
+        String content,
 
-    /** 文件消息（contentType=2/3）：下载/预览地址（预签名上传后由前端回传）。 */
-    private String fileUrl;
+        String fileUrl,
 
-    @Size(max = 255)
-    private String fileName;
+        @Size(max = 255)
+        String fileName,
 
-    private Long fileSize;
+        Long fileSize,
 
-    @Size(max = 128)
-    private String mediaType;
+        @Size(max = 128)
+        String mediaType
+) {
 }

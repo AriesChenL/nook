@@ -44,16 +44,16 @@ public class FileStorageService {
     private final S3Presigner presigner;
 
     public PresignVO presignPut(Long userId, PresignRequest req) {
-        long size = req.getSize();
+        long size = req.size();
         if (size <= 0 || size > props.getMaxFileSize()) {
             throw new BusinessException(ResultCode.FILE_TOO_LARGE);
         }
-        String mime = normalizeMime(req.getMimeType());
+        String mime = normalizeMime(req.mimeType());
         if (!allowed(mime)) {
             throw new BusinessException(ResultCode.FILE_TYPE_NOT_ALLOWED);
         }
 
-        String key = buildKey(userId, req.getFileName());
+        String key = buildKey(userId, req.fileName());
         PutObjectRequest objectRequest = PutObjectRequest.builder()
                 .bucket(props.getBucket())
                 .key(key)
@@ -65,13 +65,12 @@ public class FileStorageService {
                 .build();
         PresignedPutObjectRequest presigned = presigner.presignPutObject(presignRequest);
 
-        return PresignVO.builder()
-                .uploadUrl(presigned.url().toString())
-                .downloadUrl(props.getPublicBaseUrl() + "/" + key)
-                .objectKey(key)
-                .mediaType(mime)
-                .expireSeconds(props.getPresignExpireSeconds())
-                .build();
+        return new PresignVO(
+                presigned.url().toString(),
+                props.getPublicBaseUrl() + "/" + key,
+                key,
+                mime,
+                props.getPresignExpireSeconds());
     }
 
     private boolean allowed(String mime) {

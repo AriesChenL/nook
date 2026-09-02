@@ -2,22 +2,23 @@ package com.lynn.nook.ai.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
 
-@Data
-public class CreateAgentRequest {
+/**
+ * @param persona   人格设定，注入 sysPrompt
+ * @param modelName 可选；缺省 deepseek-v4-flash
+ */
+public record CreateAgentRequest(
 
-    @NotBlank
-    @Size(max = 64)
-    private String name;
+        @NotBlank
+        @Size(max = 64)
+        String name,
 
-    /** 人格设定，注入 sysPrompt */
-    private String persona;
+        String persona,
 
-    @Size(max = 512)
-    private String avatarUrl;
+        @Size(max = 512)
+        String avatarUrl,
 
-    /** 可选；缺省 deepseek-v4-flash */
-    @Size(max = 64)
-    private String modelName;
+        @Size(max = 64)
+        String modelName
+) {
 }

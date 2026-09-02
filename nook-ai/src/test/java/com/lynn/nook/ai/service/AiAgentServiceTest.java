@@ -29,23 +29,20 @@ class AiAgentServiceTest {
 
     @Test
     void create_fillsDefaultsAndReturnsVO() {
-        CreateAgentRequest req = new CreateAgentRequest();
-        req.setName("小冰");
-        req.setPersona("高冷御姐");
+        CreateAgentRequest req = new CreateAgentRequest("小冰", "高冷御姐", null, null);
 
         AgentVO vo = service.create(1L, req);
 
-        assertEquals("小冰", vo.getName());
-        assertEquals(1L, vo.getOwnerUserId());
-        assertEquals("高冷御姐", vo.getPersona());
-        assertEquals("deepseek-v4-flash", vo.getModelName(), "未指定模型应回落默认");
+        assertEquals("小冰", vo.name());
+        assertEquals(1L, vo.ownerUserId());
+        assertEquals("高冷御姐", vo.persona());
+        assertEquals("deepseek-v4-flash", vo.modelName(), "未指定模型应回落默认");
         verify(agentMapper).insert(org.mockito.ArgumentMatchers.any(AiAgent.class));
     }
 
     @Test
     void create_blankName_throws() {
-        CreateAgentRequest req = new CreateAgentRequest();
-        req.setName("   ");
+        CreateAgentRequest req = new CreateAgentRequest("   ", null, null, null);
         BusinessException ex = assertThrows(BusinessException.class, () -> service.create(1L, req));
         assertEquals(ResultCode.AI_AGENT_NAME_BLANK.getCode(), ex.getCode());
     }

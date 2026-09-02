@@ -35,16 +35,16 @@ public class AuthService {
     private final JwtProperties jwtProperties;
 
     public Long register(RegisterRequest req) {
-        QueryWrapper qw = QueryWrapper.create().where("username = ?", req.getUsername());
+        QueryWrapper qw = QueryWrapper.create().where("username = ?", req.username());
         if (userMapper.selectCountByQuery(qw) > 0) {
             throw new BusinessException(ResultCode.USERNAME_EXISTS);
         }
 
         User u = new User();
         u.setPublicId(java.util.UUID.randomUUID().toString());
-        u.setUsername(req.getUsername());
-        u.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-        u.setNickname(req.getNickname() != null ? req.getNickname() : req.getUsername());
+        u.setUsername(req.username());
+        u.setPasswordHash(passwordEncoder.encode(req.password()));
+        u.setNickname(req.nickname() != null ? req.nickname() : req.username());
         u.setStatus((short) 1);
         u.setCreatedAt(OffsetDateTime.now());
         u.setUpdatedAt(OffsetDateTime.now());
@@ -54,7 +54,7 @@ public class AuthService {
     }
 
     public LoginResponse login(LoginRequest req) {
-        QueryWrapper qw = QueryWrapper.create().where("username = ?", req.getUsername());
+        QueryWrapper qw = QueryWrapper.create().where("username = ?", req.username());
         User u = userMapper.selectOneByQuery(qw);
         if (u == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
@@ -62,7 +62,7 @@ public class AuthService {
         if (u.getStatus() == null || u.getStatus() != 1) {
             throw new BusinessException(ResultCode.USER_DISABLED);
         }
-        if (!passwordEncoder.matches(req.getPassword(), u.getPasswordHash())) {
+        if (!passwordEncoder.matches(req.password(), u.getPasswordHash())) {
             throw new BusinessException(ResultCode.PASSWORD_INCORRECT);
         }
 
@@ -116,15 +116,8 @@ public class AuthService {
     public MeResponse me(Long userId) {
         User u = userMapper.selectOneById(userId);
         if (u == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        return MeResponse.builder()
-                .id(u.getPublicId())
-                .username(u.getUsername())
-                .nickname(u.getNickname())
-                .avatarUrl(u.getAvatarUrl())
-                .email(u.getEmail())
-                .phone(u.getPhone())
-                .status(u.getStatus())
-                .build();
+        return new MeResponse(u.getPublicId(), u.getUsername(), u.getNickname(),
+                u.getAvatarUrl(), u.getEmail(), u.getPhone(), u.getStatus());
     }
 
     /**
@@ -133,13 +126,13 @@ public class AuthService {
     public void changePassword(Long userId, String currentToken, ChangePasswordRequest req) {
         User u = userMapper.selectOneById(userId);
         if (u == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        if (!passwordEncoder.matches(req.getOldPassword(), u.getPasswordHash())) {
+        if (!passwordEncoder.matches(req.oldPassword(), u.getPasswordHash())) {
             throw new BusinessException(ResultCode.PASSWORD_INCORRECT);
         }
-        if (passwordEncoder.matches(req.getNewPassword(), u.getPasswordHash())) {
+        if (passwordEncoder.matches(req.newPassword(), u.getPasswordHash())) {
             throw new BusinessException(ResultCode.SAME_AS_OLD_PASSWORD);
         }
-        u.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        u.setPasswordHash(passwordEncoder.encode(req.newPassword()));
         u.setUpdatedAt(OffsetDateTime.now());
         userMapper.update(u);
 

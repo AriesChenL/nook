@@ -74,7 +74,7 @@ public class FriendController {
     public Result<Void> updateRemark(@RequestHeader(RequestHeaders.USER_ID) Long userId,
                                      @PathVariable String friendUserId,
                                      @Valid @RequestBody UpdateFriendRemarkRequest req) {
-        friendService.updateRemark(userId, friendUserId, req.getRemark());
+        friendService.updateRemark(userId, friendUserId, req.remark());
         return Result.ok();
     }
 }

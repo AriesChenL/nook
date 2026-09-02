@@ -55,11 +55,11 @@ class MemberQueryServiceTest {
 
         verify(conversationService).requireMember(5L, 1L);
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).getUserId()).isEqualTo("pub-1");
-        assertThat(result.get(0).getNickname()).isEqualTo("Alice");
-        assertThat(result.get(0).getRole()).isEqualTo(ConversationMember.ROLE_OWNER);
-        assertThat(result.get(1).getUserId()).isEqualTo("pub-2");
-        assertThat(result.get(1).getNickname()).isEqualTo("Bob");
+        assertThat(result.get(0).userId()).isEqualTo("pub-1");
+        assertThat(result.get(0).nickname()).isEqualTo("Alice");
+        assertThat(result.get(0).role()).isEqualTo(ConversationMember.ROLE_OWNER);
+        assertThat(result.get(1).userId()).isEqualTo("pub-2");
+        assertThat(result.get(1).nickname()).isEqualTo("Bob");
     }
 
     @Test
@@ -73,9 +73,9 @@ class MemberQueryServiceTest {
 
         // 资料取不到但成员关系仍返回；脱敏前提缺失时 userId/昵称为 null
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).getUserId()).isNull();
-        assertThat(result.get(0).getNickname()).isNull();
-        assertThat(result.get(0).getRole()).isEqualTo(ConversationMember.ROLE_OWNER);
+        assertThat(result.get(0).userId()).isNull();
+        assertThat(result.get(0).nickname()).isNull();
+        assertThat(result.get(0).role()).isEqualTo(ConversationMember.ROLE_OWNER);
     }
 
     @Test
@@ -89,10 +89,10 @@ class MemberQueryServiceTest {
 
         List<MemberVO> result = service.listMembers(1L, 5L);
 
-        assertThat(result.get(0).getUserId()).isEqualTo("pub-1");
-        assertThat(result.get(0).getNickname()).isEqualTo("Alice");
-        assertThat(result.get(1).getUserId()).isNull();
-        assertThat(result.get(1).getNickname()).isNull();
+        assertThat(result.get(0).userId()).isEqualTo("pub-1");
+        assertThat(result.get(0).nickname()).isEqualTo("Alice");
+        assertThat(result.get(1).userId()).isNull();
+        assertThat(result.get(1).nickname()).isNull();
     }
 
     @Test

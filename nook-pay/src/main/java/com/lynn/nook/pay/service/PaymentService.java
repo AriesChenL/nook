@@ -42,14 +42,14 @@ public class PaymentService {
 
     /** 一次性付款：创建 payment 模式的 Checkout 会话，并落一条 CREATED 订单。 */
     public CheckoutResponse createOneTimeCheckout(Long userId, CreateCheckoutRequest req) {
-        String priceId = resolvePrice(req.getProductCode());
-        int qty = req.getQuantity() == null ? 1 : Math.max(1, req.getQuantity());
+        String priceId = resolvePrice(req.productCode());
+        int qty = Math.max(1, req.quantity());
 
         String orderPublicId = UUID.randomUUID().toString();
         PaymentOrder order = new PaymentOrder();
         order.setPublicId(orderPublicId);
         order.setUserId(userId);
-        order.setProductCode(req.getProductCode());
+        order.setProductCode(req.productCode());
         order.setQuantity(qty);
         order.setStatus("CREATED");
         order.setCreatedAt(OffsetDateTime.now());
@@ -77,14 +77,14 @@ public class PaymentService {
 
             return new CheckoutResponse(session.getUrl(), session.getId(), orderPublicId);
         } catch (StripeException e) {
-            log.error("创建一次性支付会话失败 userId={} product={}", userId, req.getProductCode(), e);
+            log.error("创建一次性支付会话失败 userId={} product={}", userId, req.productCode(), e);
             throw new BusinessException(ResultCode.PAY_STRIPE_ERROR);
         }
     }
 
     /** 订阅：确保用户有 Stripe Customer，再创建 subscription 模式的 Checkout 会话。 */
     public CheckoutResponse createSubscriptionCheckout(Long userId, CreateCheckoutRequest req) {
-        String priceId = resolvePrice(req.getProductCode());
+        String priceId = resolvePrice(req.productCode());
         String customerId = ensureCustomer(userId);
 
         try {
@@ -103,7 +103,7 @@ public class PaymentService {
             Session session = Session.create(params);
             return new CheckoutResponse(session.getUrl(), session.getId(), null);
         } catch (StripeException e) {
-            log.error("创建订阅支付会话失败 userId={} product={}", userId, req.getProductCode(), e);
+            log.error("创建订阅支付会话失败 userId={} product={}", userId, req.productCode(), e);
             throw new BusinessException(ResultCode.PAY_STRIPE_ERROR);
         }
     }

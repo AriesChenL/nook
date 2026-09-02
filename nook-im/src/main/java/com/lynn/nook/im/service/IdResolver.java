@@ -173,15 +173,15 @@ public class IdResolver {
             Result<List<UserBriefVO>> resp = userClient.listByIds(List.copyOf(distinct));
             if (resp == null || resp.getData() == null) return Map.of();
             List<UserBriefVO> briefs = resp.getData().stream()
-                    .filter(u -> u.getId() != null)
+                    .filter(u -> u.id() != null)
                     .toList();
             if (briefs.isEmpty()) return Map.of();
 
             // public_id -> 数字 userId，反查得到数字键
-            Map<String, Long> pubToNum = resolveUserIds(briefs.stream().map(UserBriefVO::getId).toList());
+            Map<String, Long> pubToNum = resolveUserIds(briefs.stream().map(UserBriefVO::id).toList());
             Map<Long, UserBriefVO> byNum = new HashMap<>();
             for (UserBriefVO b : briefs) {
-                Long num = pubToNum.get(b.getId());
+                Long num = pubToNum.get(b.id());
                 if (num != null) byNum.put(num, b);
             }
             return byNum;
@@ -195,7 +195,7 @@ public class IdResolver {
     public Map<Long, String> userPublicIds(Collection<Long> numericIds) {
         Map<Long, UserBriefVO> profiles = userProfilesByNumericId(numericIds);
         Map<Long, String> map = new HashMap<>();
-        profiles.forEach((num, brief) -> map.put(num, brief.getId()));
+        profiles.forEach((num, brief) -> map.put(num, brief.id()));
         return map;
     }
 
