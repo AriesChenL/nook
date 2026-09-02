@@ -50,7 +50,7 @@ nook:
     deepseek:                       # OpenAI 兼容协议；api-key 走 .env / 环境变量
       api-key: ${DEEPSEEK_API_KEY:}
       base-url: https://api.deepseek.com
-      model: deepseek-v4-flash
+      model: deepseek-v4-flash-0731   # 2026-07-31 生产版：重做 post-training，coding/推理/agent 更强；固定日期快照便于复现
     store:                          # agentscope 官方 PG 存储
       schema: public
       fs-table: agentscope_fs_store

@@ -71,7 +71,7 @@
 - RabbitMQ（默认关闭，多实例广播时开启）
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
-- AI：agentscope-harness 2.0.2（单例 HarnessAgent + Gateway/Channel）· DeepSeek `deepseek-v4-flash`（OpenAI 兼容）
+- AI：agentscope-harness 2.0.2（单例 HarnessAgent + Gateway/Channel）· DeepSeek `deepseek-v4-flash-0731`（OpenAI 兼容）
 
 **前端（nook-web）**
 - Vue 3.5 · Vite · TypeScript · Pinia · Vue Router
@@ -106,7 +106,7 @@
 - **只读环境 100% 入 PG**：agentscope 官方 `PostgresBaseStore`（workspace）+ `PostgresAgentStateStore`（对话快照），不依赖任何本地文件/SQLite
 - **单例 + persona 逐轮注入**：全模块一个 HarnessAgent（`sysPrompt` 留空），persona 经 `PersonaMiddleware` 随请求注入系统提示——persona 改动下一轮即生效，无需按 agentId 缓存/重建
 - **对话**：会话线程（`/ai/agents/{id}/sessions`）+ 流式对话（`/ai/agents/{id}/chat/stream`，经 `ChatUiChannel.sendStream` 走 Gateway，带 per-session 排队，SSE 推 `TEXT_BLOCK_DELTA` 增量；另留同步 `/chat` 兜底）
-- **模型**：DeepSeek `deepseek-v4-flash`；API Key 走 `nook-ai/.env`（启动加载，不入库）
+- **模型**：DeepSeek `deepseek-v4-flash-0731`（2026-07-31 生产版，agent/推理表现优于旧 preview）；API Key 走 `nook-ai/.env`（启动加载，不入库）
 
 ### 🚪 网关（nook-gateway）
 - 路由转发 + JWT 鉴权 + Redis token 校验 + 注入 `X-User-Id` / `X-Username` + CORS + WebSocket `?access_token=` 兼容 + OPTIONS 放行
