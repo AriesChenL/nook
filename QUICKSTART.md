@@ -38,37 +38,43 @@ cd nook
 
 ```bash
 docker compose up -d
-```
-
-这会拉起 5 个容器（首次拉镜像稍慢）。等它们就绪：
-
-```bash
 docker compose ps        # 看 STATUS 都是 Up / healthy
 ```
 
 数据库表结构由各服务启动时 **Flyway 自动迁移**，无需手动建表。
 
-> Windows 也可用脚本：`nook.bat up`（封装了 `docker compose up`）。
+> Windows 也可用脚本：`nook.bat up`（封装了 `docker compose up` + 下一步的 Nacos 配置推送）。
 
 ---
 
-## 4. 配置 AI 密钥（仅 nook-ai 需要）
+## 3.5. 推送 Nacos 共享配置（必做）
+
+DB / Redis / RabbitMQ 口令、JWT 密钥、RustFS / DeepSeek / Stripe 凭据统一放在 **Nacos 共享配置 `nook-shared.yml`**，各服务启动时加载。**没有它服务起不来。**
 
 ```bash
-cp nook-ai/.env.example nook-ai/.env
+scripts/nacos/push-shared-config.sh      # 默认 http://localhost:8848，无鉴权
 ```
 
-编辑 `nook-ai/.env`，填入 DeepSeek API Key（[申请地址](https://platform.deepseek.com/api_keys)）：
+内容即 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)，每项都是 `${环境变量:开发默认值}`——本地不设任何环境变量即用默认值，可直接跑。改了配置重新执行脚本即可（`refresh: true` 会热更新）。
 
-```
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
-```
-
-> `.env` 已 gitignore，启动时经 `spring.config.import` 自动加载。不配也能启动，但 AI 对话会报模型错误。
+> `nook.bat up` 会自动推一次；也可在 Nacos 控制台（http://localhost:8849）手动新建 dataId=`nook-shared.yml`、group=`DEFAULT_GROUP`、格式 YAML。
 
 ---
 
-## 5. 起后端（5 个服务）
+## 4. 配置 AI 密钥 / Stripe 密钥（可选）
+
+`nook-shared.yml` 里 `nook.ai.deepseek.api-key` 与 `nook.stripe.*` 默认为空。三种填法任选：
+
+1. **改 Nacos 里的 `nook-shared.yml`**：把 `${DEEPSEEK_API_KEY:}` 换成真实 key，重推脚本。
+2. **环境变量**：`export DEEPSEEK_API_KEY=sk-xxx`（`nook.bat` 用 `set`），再起服务。
+3. **`.env` 文件**（仅 nook-ai）：`cp nook-ai/.env.example nook-ai/.env` 后填 `DEEPSEEK_API_KEY=sk-xxx`。
+
+> 不配也能启动；AI 对话会报模型错误，Stripe 相关接口返回「支付未配置」。
+> nook-pay 也支持 `--spring.profiles.active=local` 加载 `nook-pay/application-local.yml`（已 gitignore）。
+
+---
+
+## 5. 起后端（6 个服务）
 
 确保 JDK 25：
 
@@ -91,6 +97,7 @@ export JAVA_HOME=/path/to/jdk-25       # macOS / Linux
 ./mvnw -pl nook-user    spring-boot:run
 ./mvnw -pl nook-im      spring-boot:run
 ./mvnw -pl nook-ai      spring-boot:run
+./mvnw -pl nook-pay     spring-boot:run
 ```
 
 > 每个服务一个终端；或在 IDE 里分别运行各模块的 `*Application`。
@@ -119,7 +126,7 @@ pnpm dev
 | **前端** | http://localhost:5173 | 唯一用户入口 |
 | 网关 | http://localhost:8080 | 前端所有请求经此鉴权转发 |
 
-后端各服务端口：auth `8081` / user `8082` / im `8083`（WebSocket）/ ai `8084`。
+后端各服务端口：auth `8081` / user `8082` / im `8083`（WebSocket）/ ai `8084` / pay `8085`。
 
 运维控制台（开发用）：
 
@@ -145,8 +152,10 @@ pnpm dev
 - **启动报 JDK 版本错** → `java -version` 不是 25，重设 `JAVA_HOME`。
 - **AI 对话报错** → 没配 `nook-ai/.env` 的 `DEEPSEEK_API_KEY`，或 key 无效/无余额。
 - **端口被占用** → 8080-8084 / 5173 / 5432 / 6379 / 8848 / 5672 / 15672 / 9000 / 9001 需空闲。
-- **服务连不上 Nacos/DB** → 确认 `docker compose ps` 容器都 Up；nook-auth 要先启动。
-- **登录后请求全 401** → `nook-auth` 与 `nook-gateway` 的 `nook.jwt.secret` 不一致。本地默认值两者已对齐；若在 Nacos 建了 `nook-shared.yml`（`docs/nacos/nook-shared.yml`）就以它为准，两服务都会加载。
+- **服务启动即报 DB/连接失败** → 多半是没推 Nacos 共享配置。先 `scripts/nacos/push-shared-config.sh`（见 3.5），再起服务。
+- **服务连不上 Nacos** → 确认 `docker compose ps` 里 `nook-nacos` 是 Up；Nacos 首启较慢（~30s）。
+- **登录后请求全 401** → `nook-shared.yml` 里 `nook.jwt.secret` 变过但只推了一半，或某服务起在配置推送之前。重推脚本 + 重启 auth/gateway。
+- **AI 报模型错误 / Stripe 报未配置** → `nook-shared.yml` 里对应 key 为空，按第 4 步填。
 - **多实例消息广播** → 默认 `nook.im.mq.enabled=true` 走 RabbitMQ；单机不想起 broker 可在 `nook-im/application.yml` 设 `false` 走进程内直推。
 
 ---

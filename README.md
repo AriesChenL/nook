@@ -276,13 +276,16 @@ pnpm dev        # http://localhost:5173
 
 ## 配置说明
 
-- **JWT 密钥**：`nook.jwt.secret` 由 Nacos 共享配置 `nook-shared.yml` 提供（`nook-auth` 签发 / `nook-gateway` 校验，同源）。发布内容见 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)。本地未接 Nacos 时回退到两服务 yml 里一致的开发默认值（可用 `NOOK_JWT_SECRET` 环境变量覆盖）；**生产务必在 Nacos 里换成强随机值（≥32 字节）**。
+- **配置集中在 Nacos**：DB / Redis / RabbitMQ 口令、`nook.jwt.secret`、RustFS / DeepSeek / Stripe 凭据全部放 Nacos 共享配置 **`nook-shared.yml`**（dataId=`nook-shared.yml`, group=`DEFAULT_GROUP`），6 个服务经 `spring.cloud.nacos.config.shared-configs` 加载（`refresh: true` 热更新）。**没有它服务起不来。**
+  - 发布：`scripts/nacos/push-shared-config.sh`（`nook.bat up` 自动执行一次）；内容见 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)。
+  - 每项均 `${环境变量:开发默认值}`：本地不设环境变量即用默认值直接跑；生产在 Nacos 所在环境设环境变量，或直接改 `nook-shared.yml` 的值后重推。
+  - 各服务 `application.yml` 只保留非敏感、单服务的配置（端口、路由、mq 开关、AI 模型/额度、Stripe 套餐映射与回跳地址等）。
+  - `NACOS_ADDR` 环境变量可覆盖 Nacos 地址（默认 `localhost:8848`）。
+- **JWT 密钥**：`nook-auth` 签发 / `nook-gateway` 校验，同源自 `nook-shared.yml`。**生产务必换强随机值（≥32 字节 / HS256）**。
 - **多实例广播**：`nook.im.mq.enabled=true`（默认）时新消息/撤回/在线状态走 RabbitMQ 广播 exchange（每实例一条匿名队列，各收全量）；单机若不想起 broker 可设 `false` 走进程内本地直推。
-- **Nacos 3.x**：需配 `NACOS_AUTH_TOKEN`（base64）等三件套，即使关认证也要给。
-- **PostgreSQL 18+**：数据卷挂载到 `/var/lib/postgresql/data`。
-- **MyBatis-Flex**：每个 ORM 模块需单独加 `spring-boot-starter-jdbc`，启动类加 `@MapperScan`。
-- **AI 密钥**：`nook-ai/.env` 写 `DEEPSEEK_API_KEY`（不入库），或用同名环境变量覆盖。
-- **对象存储**：`docker-compose` 的 `RUSTFS_SECRET_KEY` 须与 `nook-im` 的 `nook.storage.secret-key` 一致；bucket 由 `nook-im` 启动自建。
+- **Nacos 3.x**：`docker-compose` 已配 `NACOS_AUTH_*` 三件套（即使关认证也要给）。
+- **AI / Stripe 密钥**：`nook-shared.yml` 里默认为空。填法见 [QUICKSTART 第 4 步](QUICKSTART.md)（改 Nacos / 环境变量 / `nook-ai/.env` / `nook-pay` 的 `local` profile 任选）。
+- **对象存储**：`docker-compose` 的 `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY` 须与 `nook-shared.yml` 的 `nook.storage.*` 一致；bucket 由 `nook-im` / `nook-ai` 启动自建。
 
 ---
 
@@ -316,7 +319,8 @@ nook/
 ├─ nook-web/        前端 Vue 3
 ├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
 ├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
-├─ docs/nacos/      Nacos 共享配置（nook-shared.yml：JWT 密钥等跨服务项）
+├─ scripts/nacos/   push-shared-config.sh（发布 nook-shared.yml 到 Nacos）
+├─ docs/nacos/      nook-shared.yml：DB/Redis/MQ 口令 + JWT + RustFS/DeepSeek/Stripe 凭据
 ├─ docker-compose.yml
 └─ nook.bat         基础设施一键启停
 ```
@@ -335,7 +339,7 @@ nook/
 - [x] **会话列表去 N+1**：`ConversationVO` 内联 `lastMessage`（发送者脱敏 + 撤回屏蔽），前端不再逐会话拉最后一条
 - [x] **在线状态快照**：`GET /im/presence/online` 返回在线好友，前端进页面/每次 WS `ready` 后拉一次对齐（WS 只推跳变）
 - [x] **可观测**：业务服务接入 actuator 健康端点
-- [x] **JWT 密钥统一**到 Nacos 共享配置 `nook-shared.yml`（`shared-configs` 加载，本地回退环境变量/默认值）
+- [x] **配置/密钥全部收口 Nacos**：DB/Redis/RabbitMQ 口令 + JWT + RustFS/DeepSeek/Stripe 凭据 → `nook-shared.yml`（6 服务 `shared-configs` 加载）；`scripts/nacos/push-shared-config.sh` 一键发布；各项 `${env:dev默认}`，本地零环境变量可跑
 - [ ] **离线推送**（APNs / FCM）
 
 ---

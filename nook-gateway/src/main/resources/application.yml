@@ -5,24 +5,17 @@ spring:
   application:
     name: nook-gateway
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: redis123
-      database: 0
-      timeout: 3s
+  # Redis / JWT 密钥来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
 
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
       config:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
         file-extension: yml
         import-check:
           enabled: false
-        # 跨服务共享项（JWT 密钥等）统一放 nook-shared.yml，见 docs/nacos/nook-shared.yml
         shared-configs:
           - data-id: nook-shared.yml
             group: DEFAULT_GROUP
@@ -37,6 +30,7 @@ spring:
           globalcors:
             cors-configurations:
               '[/**]':
+                # 生产改成真实前端域名（P0 待办）
                 allowed-origin-patterns:
                   - "http://localhost:*"
                   - "http://127.0.0.1:*"
@@ -67,11 +61,8 @@ spring:
                 - Path=/pay/**
 
 nook:
-  jwt:
-    # 必须和 nook-auth 同源：生产由 Nacos 共享配置 nook-shared.yml 覆盖；本地回退默认值与 nook-auth 保持一致
-    secret: ${NOOK_JWT_SECRET:dev-only-nook-jwt-secret-change-me-at-least-32-bytes-long}
   gateway:
-    # 不需要 JWT 校验的路径前缀（注册、登录、健康检查）
+    # 不需要 JWT 校验的路径前缀（注册、登录、健康检查、Stripe 回调）
     whitelist:
       - /auth/register
       - /auth/login

@@ -1,25 +1,67 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Nacos 共享配置
+# Nacos 共享配置 —— 所有跨服务 / 敏感配置的唯一来源
 #   dataId : nook-shared.yml
 #   group  : DEFAULT_GROUP
 #   format : YAML
 #
-# 加载方：nook-auth / nook-gateway
-#   （spring.cloud.nacos.config.shared-configs 里声明，refresh: true 支持热更新）
+# 加载方：nook-gateway / nook-auth / nook-user / nook-im / nook-ai / nook-pay
+#   （spring.cloud.nacos.config.shared-configs 声明，refresh: true 支持热更新）
 #
-# 发布方式（任选其一）：
-#   - Nacos 控制台 → 配置管理 → 新建配置，把本文件内容整段贴入
-#   - openapi: curl -X POST "$NACOS/nacos/v1/cs/configs" \
-#       --data-urlencode "dataId=nook-shared.yml" \
-#       --data-urlencode "group=DEFAULT_GROUP" \
-#       --data-urlencode "type=yaml" \
-#       --data-urlencode "content@docs/nacos/nook-shared.yml"
+# 每项都是 ${ENV_VAR:开发默认值}：
+#   - 本地：不设环境变量即用开发默认值（配合 nook.bat / docker-compose 的默认口令）
+#   - 生产：在 Nacos 所在环境设对应环境变量，或直接把本文件里的值改成真实值后重新发布
+#
+# 首次发布 / 更新：scripts/nacos/push-shared-config.sh
+#   （或 nook.bat up 会自动推一次；也可在 Nacos 控制台手动新建）
 # ─────────────────────────────────────────────────────────────────────────────
 
+spring:
+  # PostgreSQL —— 5 个 ORM 服务共用（gateway 无 DataSource，读到也不用）
+  datasource:
+    url: ${NOOK_DB_URL:jdbc:postgresql://localhost:5432/nook}
+    username: ${NOOK_DB_USERNAME:nook}
+    password: ${NOOK_DB_PASSWORD:nook123}
+
+  # Redis —— gateway / auth / im 使用（其余服务无 redis starter，读到也不用）
+  data:
+    redis:
+      host: ${NOOK_REDIS_HOST:localhost}
+      port: ${NOOK_REDIS_PORT:6379}
+      password: ${NOOK_REDIS_PASSWORD:redis123}
+      database: 0
+      timeout: 3s
+
+  # RabbitMQ —— 仅 nook-im 使用（多实例事件广播）
+  rabbitmq:
+    host: ${NOOK_RABBITMQ_HOST:localhost}
+    port: ${NOOK_RABBITMQ_PORT:5672}
+    username: ${NOOK_RABBITMQ_USERNAME:nook}
+    password: ${NOOK_RABBITMQ_PASSWORD:nook123}
+    virtual-host: /
+
 nook:
+  # JWT 签名密钥 —— nook-auth 签发、nook-gateway 校验，必须同源。
+  # 生产务必换强随机值（HS256 需 ≥ 32 字节 / 256 bit）。
   jwt:
-    # JWT 签名密钥：nook-auth 签发、nook-gateway 校验，两侧必须同源。
-    # 生产务必替换为强随机值（HS256 要求 ≥ 32 字节 / 256 bit），不要沿用仓库里的开发默认值。
-    # 可直接写字面量，或保留 ${NOOK_JWT_SECRET:...} 由 Nacos 所在环境的环境变量注入。
-    secret: ${NOOK_JWT_SECRET:REPLACE-ME-WITH-A-STRONG-RANDOM-SECRET-AT-LEAST-32-BYTES}
-    expire-minutes: 1440
+    secret: ${NOOK_JWT_SECRET:dev-only-nook-jwt-secret-change-me-at-least-32-bytes-long}
+    expire-minutes: ${NOOK_JWT_EXPIRE_MINUTES:1440}
+
+  # 对象存储（RustFS / S3 兼容）—— 共享 endpoint 与凭据；bucket 等业务字段在各服务 yml
+  storage:                       # nook-im：预签名直传 + 公开读
+    endpoint: ${NOOK_STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${NOOK_STORAGE_ACCESS_KEY:rustfsadmin}
+    secret-key: ${NOOK_STORAGE_SECRET_KEY:rustfssecret}
+
+  ai:
+    storage:                     # nook-ai：agent 工作区裸对象（与上面同一套 RustFS 凭据）
+      endpoint: ${NOOK_STORAGE_ENDPOINT:http://localhost:9000}
+      access-key: ${NOOK_STORAGE_ACCESS_KEY:rustfsadmin}
+      secret-key: ${NOOK_STORAGE_SECRET_KEY:rustfssecret}
+    deepseek:
+      # DeepSeek API Key（OpenAI 兼容协议）。本地填这里，或 export DEEPSEEK_API_KEY。
+      api-key: ${DEEPSEEK_API_KEY:}
+
+  stripe:
+    # Stripe 密钥。本地填 test 模式 key（sk_test_ / whsec_），或 export STRIPE_API_KEY / STRIPE_WEBHOOK_SECRET。
+    api-key: ${STRIPE_API_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}

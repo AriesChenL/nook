@@ -5,22 +5,17 @@ spring:
   application:
     name: nook-ai
 
-  # 本地密钥文件（properties 格式，如 DEEPSEEK_API_KEY=sk-xxx）。optional=不存在不报错；
+  # 本地密钥文件（properties 格式，如 DEEPSEEK_API_KEY=sk-xxx）。optional=不存在不报错。
+  # 作用：给 Nacos 共享配置里的 ${DEEPSEEK_API_KEY} 提供取值（等价于设环境变量）。
   # 两条分别覆盖「工作目录=模块目录」(spring-boot:run / IDE) 与「工作目录=仓库根」两种启动方式。
-  # .env 已被根 .gitignore 忽略；模板见 nook-ai/.env.example。
   config:
     import:
       - optional:file:.env[.properties]
       - optional:file:nook-ai/.env[.properties]
 
-  datasource:
-    url: jdbc:postgresql://localhost:5432/nook
-    username: nook
-    password: nook123
-    driver-class-name: org.postgresql.Driver
+  # DataSource / DeepSeek key / 对象存储凭据来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
 
   # 迁移脚本在 nook-common 的 classpath:db/migration。
-  # baseline-on-migrate：已有库(无 history 表)时采纳现状为基线 V1，不重跑建表。
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -29,12 +24,16 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
       config:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
         file-extension: yml
         import-check:
           enabled: false
+        shared-configs:
+          - data-id: nook-shared.yml
+            group: DEFAULT_GROUP
+            refresh: true
 
 # ───────────── ORM ─────────────
 mybatis-flex:
@@ -42,13 +41,11 @@ mybatis-flex:
     print-banner: false
 
 # ───────────── nook-ai ─────────────
-# DeepSeek 模型 + agentscope 官方 PG 存储落表位置 + 上下文压缩阈值。代码里不留裸字面量。
-# 本地工作区目录不在此配：用 agentscope 默认 ./.agentscope/workspace（仅索引锚点，内容全部入 PG），
-# 需要时用环境变量 AGENTSCOPE_WORKSPACE 或 -Dagentscope.workspace 覆盖。
+# DeepSeek 模型（api-key 在 nook-shared.yml）+ agentscope 官方 PG 存储落表位置 + 上下文压缩阈值 + 免费版额度。
+# 本地工作区目录用 agentscope 默认 ./.agentscope/workspace（仅索引锚点，内容全部入 PG）。
 nook:
   ai:
-    deepseek:                       # OpenAI 兼容协议；api-key 走 .env / 环境变量
-      api-key: ${DEEPSEEK_API_KEY:}
+    deepseek:
       base-url: https://api.deepseek.com
       model: deepseek-v4-flash-0731   # 2026-07-31 生产版：重做 post-training，coding/推理/agent 更强；固定日期快照便于复现
     store:                          # agentscope 官方 PG 存储

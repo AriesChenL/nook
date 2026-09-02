@@ -5,11 +5,8 @@ spring:
   application:
     name: nook-auth
 
-  datasource:
-    url: jdbc:postgresql://localhost:5432/nook
-    username: nook
-    password: nook123
-    driver-class-name: org.postgresql.Driver
+  # DataSource / Redis / JWT 等敏感与跨服务配置来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
+  # 本地未接 Nacos 无法启动 —— 先跑 scripts/nacos/push-shared-config.sh（或 nook.bat up 自动推）。
 
   # Flyway：迁移脚本在 nook-common 的 classpath:db/migration（已有库采纳现状为基线）
   flyway:
@@ -17,24 +14,15 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: redis123
-      database: 0
-      timeout: 3s
-
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
       config:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
         file-extension: yml
         import-check:
           enabled: false
-        # 跨服务共享项（JWT 密钥等）统一放 nook-shared.yml，见 docs/nacos/nook-shared.yml
         shared-configs:
           - data-id: nook-shared.yml
             group: DEFAULT_GROUP
@@ -43,12 +31,6 @@ spring:
 mybatis-flex:
   global-config:
     print-banner: false
-
-nook:
-  jwt:
-    # 生产：由 Nacos 共享配置 nook-shared.yml 覆盖；本地未接 Nacos 时用下面的开发默认值（HS256 需 ≥32 字节）
-    secret: ${NOOK_JWT_SECRET:dev-only-nook-jwt-secret-change-me-at-least-32-bytes-long}
-    expire-minutes: 1440
 
 management:
   endpoints:

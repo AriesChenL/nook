@@ -5,11 +5,7 @@ spring:
   application:
     name: nook-user
 
-  datasource:
-    url: jdbc:postgresql://localhost:5432/nook
-    username: nook
-    password: nook123
-    driver-class-name: org.postgresql.Driver
+  # DataSource 等跨服务配置来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
 
   # Flyway：迁移脚本在 nook-common 的 classpath:db/migration（已有库采纳现状为基线）
   flyway:
@@ -17,23 +13,19 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: redis123
-      database: 0
-      timeout: 3s
-
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
       config:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_ADDR:localhost:8848}
         file-extension: yml
         import-check:
           enabled: false
+        shared-configs:
+          - data-id: nook-shared.yml
+            group: DEFAULT_GROUP
+            refresh: true
 
 mybatis-flex:
   global-config:
