@@ -16,6 +16,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 spring:
+  # Jackson —— Spring Boot 4 默认切到 Jackson 3；此开关让自动配置的 JsonMapper
+  # 尽量对齐 Boot 3.x/Jackson 2 的默认行为（日期序列化、命名策略等），避免前端拿到的 JSON 变形。
+  # 待彻底适配 Jackson 3 后可移除。
+  jackson:
+    use-jackson2-defaults: true
+
   # PostgreSQL —— 5 个 ORM 服务共用（gateway 无 DataSource，读到也不用）
   datasource:
     url: ${NOOK_DB_URL:jdbc:postgresql://localhost:5432/nook}

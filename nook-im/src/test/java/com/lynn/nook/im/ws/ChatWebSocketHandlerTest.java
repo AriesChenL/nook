@@ -1,6 +1,7 @@
 package com.lynn.nook.im.ws;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.lynn.nook.im.service.PresenceBroadcastService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,7 @@ class ChatWebSocketHandlerTest {
         sessionManager = mock(WebSocketSessionManager.class);
         presenceService = mock(PresenceService.class);
         presenceBroadcastService = mock(PresenceBroadcastService.class);
-        handler = new ChatWebSocketHandler(sessionManager, presenceService, presenceBroadcastService, new ObjectMapper());
+        handler = new ChatWebSocketHandler(sessionManager, presenceService, presenceBroadcastService, JsonMapper.builder().build());
     }
 
     private WebSocketSession sessionWith(Object userIdAttr) {

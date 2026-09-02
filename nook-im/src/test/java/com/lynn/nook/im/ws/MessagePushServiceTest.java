@@ -1,6 +1,7 @@
 package com.lynn.nook.im.ws;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.lynn.nook.im.dto.MessageVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class MessagePushServiceTest {
     @BeforeEach
     void setUp() {
         sessionManager = mock(WebSocketSessionManager.class);
-        objectMapper = new ObjectMapper();
+        objectMapper = JsonMapper.builder().build();
         pushService = new MessagePushService(sessionManager, objectMapper);
     }
 

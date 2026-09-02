@@ -1,7 +1,7 @@
 package com.lynn.nook.im.ws;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.lynn.nook.im.dto.MessageVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +44,7 @@ public class MessagePushService {
                     )
             ));
             return sessionManager.sendToUsers(memberUserIds, payload);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("serialize recall payload failed: {}", e.getMessage());
             return 0;
         }
@@ -65,7 +65,7 @@ public class MessagePushService {
                     )
             ));
             return sessionManager.sendToUsers(friendUserIds, payload);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("serialize presence payload failed: {}", e.getMessage());
             return 0;
         }
@@ -77,7 +77,7 @@ public class MessagePushService {
                     "type", type,
                     "data", message
             ));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("serialize push payload failed: {}", e.getMessage());
             return null;
         }

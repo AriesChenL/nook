@@ -1,7 +1,7 @@
 package com.lynn.nook.im.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.lynn.nook.im.dto.MessageVO;
 import com.lynn.nook.im.entity.Conversation;
 import com.lynn.nook.im.entity.Message;
@@ -88,7 +88,7 @@ public class SystemMessageService {
     private String serialize(Map<String, Object> body) {
         try {
             return objectMapper.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("serialize system message failed: {}", e.getMessage());
             return "{\"action\":\"unknown\"}";
         }

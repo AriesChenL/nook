@@ -1,6 +1,6 @@
 package com.lynn.nook.im.mq;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -11,7 +11,7 @@ class RecallEventTest {
 
     @Test
     void roundTripsThroughJackson() throws Exception {
-        ObjectMapper om = new ObjectMapper().findAndRegisterModules();
+        JsonMapper om = JsonMapper.builder().build();
         RecallEvent original = RecallEvent.builder()
                 .conversationId(10L)
                 .messageId(99L)

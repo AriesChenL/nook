@@ -1,8 +1,8 @@
 package com.lynn.nook.im.mq;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lynn.nook.im.dto.MessageVO;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -13,7 +13,7 @@ class NewMessageEventTest {
 
     @Test
     void roundTripsThroughJackson() throws Exception {
-        ObjectMapper om = new ObjectMapper().findAndRegisterModules();
+        JsonMapper om = JsonMapper.builder().build();
         NewMessageEvent original = NewMessageEvent.builder()
                 .conversationId(10L)
                 .memberUserIds(List.of(1L, 2L, 3L))

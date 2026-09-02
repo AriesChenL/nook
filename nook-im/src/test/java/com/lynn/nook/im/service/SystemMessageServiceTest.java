@@ -1,6 +1,7 @@
 package com.lynn.nook.im.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.lynn.nook.im.entity.Conversation;
 import com.lynn.nook.im.entity.Message;
 import com.lynn.nook.im.mapper.ConversationMapper;
@@ -33,7 +34,7 @@ class SystemMessageServiceTest {
         messageMapper = mock(MessageMapper.class);
         conversationMapper = mock(ConversationMapper.class);
         eventPublisher = mock(MessageEventPublisher.class);
-        service = new SystemMessageService(messageMapper, conversationMapper, eventPublisher, new ObjectMapper());
+        service = new SystemMessageService(messageMapper, conversationMapper, eventPublisher, JsonMapper.builder().build());
     }
 
     @AfterEach

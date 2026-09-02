@@ -64,7 +64,7 @@ class GlobalExceptionHandlerTest {
     void noResourceFound_returns404NotFiveHundred() {
         // Spring Boot 3.2+ 对未知路径抛 NoResourceFoundException，必须当 404 而非落到 500 兜底
         ResponseEntity<Result<Void>> resp = handler.handleNotFound(
-                new NoResourceFoundException(HttpMethod.GET, "/actuator/health"));
+                new NoResourceFoundException(HttpMethod.GET, "/actuator/health", "/actuator/health"));
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(resp.getBody().getCode()).isEqualTo(ResultCode.NOT_FOUND.getCode());

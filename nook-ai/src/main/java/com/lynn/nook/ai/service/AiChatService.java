@@ -11,7 +11,7 @@ import com.lynn.nook.ai.mapper.AiChatSessionMapper;
 import com.lynn.nook.ai.mapper.AiMessageMapper;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import io.agentscope.core.event.TextBlockDeltaEvent;
 import io.agentscope.core.event.ThinkingBlockDeltaEvent;

@@ -65,10 +65,10 @@
 ## 技术栈
 
 **后端**
-- JDK 25 · Spring Boot 3.5.14
-- Spring Cloud 2025.0.2 · Spring Cloud Alibaba 2025.0.0.0
+- JDK 25 · Spring Boot 4.0.7（Spring Framework 7 · Jackson 3）
+- Spring Cloud 2025.1.1 · Spring Cloud Alibaba 2025.1.0.0
 - 注册/配置中心 Nacos 3.x · 网关 Spring Cloud Gateway (WebFlux)
-- PostgreSQL · MyBatis-Flex 1.10.9
+- PostgreSQL · MyBatis-Flex 1.11.6
 - Redis（token 黑名单 / 在线状态 / 单端在线索引）
 - RabbitMQ（默认关闭，多实例广播时开启）
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
