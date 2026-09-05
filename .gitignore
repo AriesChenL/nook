@@ -67,3 +67,6 @@ BACKEND_PROGRESS.md
 /.runtime/
 /opentelemetry-javaagent.jar
 /skywalking-agent/
+
+### AgentScope local workspace (runtime index, do not commit) ###
+/.agentscope/
