@@ -12,7 +12,7 @@
 
     <artifactId>nook-pay</artifactId>
     <name>nook-pay</name>
-    <description>支付服务：Stripe 一次性付款 + 订阅 + Webhook</description>
+    <description>支付服务：Stripe Checkout 订阅、Billing Portal、Webhook 与权益同步</description>
 
     <dependencies>
         <dependency>

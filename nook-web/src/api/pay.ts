@@ -8,26 +8,43 @@ import { USE_MOCK, delay } from './_mock'
 export const PLAN_PRO = 'pro_monthly'
 
 export interface Subscription {
-  priceId: string
+  productCode: string | null
+  priceId: string | null
   /** active | trialing | past_due | canceled | incomplete | unpaid | paused */
   status: string
   /** 当前计费周期结束时间（ISO），null 表示无 */
   currentPeriodEnd: string | null
   /** 周期末是否自动取消 */
   cancelAtPeriodEnd: boolean | null
+  trialEnd: string | null
+  canceledAt: string | null
+}
+
+export interface Invoice {
+  stripeInvoiceId: string
+  invoiceNumber: string | null
+  status: string
+  currency: string | null
+  amountDue: number | null
+  amountPaid: number | null
+  hostedInvoiceUrl: string | null
+  invoicePdf: string | null
+  periodStart: string | null
+  periodEnd: string | null
+  paidAt: string | null
+  lastEventType: string | null
 }
 
 interface CheckoutResponse {
   checkoutUrl: string
   sessionId: string
-  orderPublicId: string | null
 }
 
 const ENTITLED = new Set(['active', 'trialing'])
 
 /** 与后端 EntitlementService 判定一致：active/trialing 且未过期才算 Pro。 */
 export function isPro(sub: Subscription | null): boolean {
-  if (!sub || !ENTITLED.has(sub.status)) return false
+  if (!sub || sub.productCode !== PLAN_PRO || !ENTITLED.has(sub.status)) return false
   if (sub.currentPeriodEnd && new Date(sub.currentPeriodEnd).getTime() < Date.now()) return false
   return true
 }
@@ -41,7 +58,11 @@ export async function getSubscription(): Promise<Subscription | null> {
 /** 发起订阅 Checkout 并跳转到 Stripe 托管收银台。success/cancel 回跳地址由后端配置。 */
 export async function startSubscriptionCheckout(productCode: string = PLAN_PRO): Promise<void> {
   if (USE_MOCK) throw new Error('演示模式不支持支付')
-  const res = await http.post<unknown, CheckoutResponse>('/pay/checkout/subscription', { productCode })
+  const res = await http.post<unknown, CheckoutResponse>(
+    '/pay/checkout/subscription',
+    { productCode },
+    { headers: { 'Idempotency-Key': crypto.randomUUID() } }
+  )
   window.location.href = res.checkoutUrl
 }
 
@@ -50,4 +71,15 @@ export async function openBillingPortal(): Promise<void> {
   if (USE_MOCK) throw new Error('演示模式不支持支付')
   const res = await http.post<unknown, { url: string }>('/pay/portal', {})
   window.location.href = res.url
+}
+
+/** 成功回跳后从 Stripe 主动读取一次权威状态，Webhook 仍是长期同步主路径。 */
+export async function syncSubscription(sessionId: string): Promise<Subscription | null> {
+  if (USE_MOCK) return delay(null)
+  return http.post<unknown, Subscription | null>('/pay/subscription/sync', { sessionId })
+}
+
+export async function listInvoices(): Promise<Invoice[]> {
+  if (USE_MOCK) return delay([])
+  return http.get<unknown, Invoice[]>('/pay/invoices')
 }

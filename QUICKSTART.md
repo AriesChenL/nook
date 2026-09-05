@@ -61,7 +61,7 @@ scripts/nacos/push-shared-config.sh      # 默认 http://localhost:8848，无鉴
 
 ---
 
-## 4. 配置 AI 密钥 / Stripe 密钥（可选）
+## 4. 配置 AI 密钥 / Stripe 密钥（支付时必需）
 
 `nook-shared.yml` 里 `nook.ai.deepseek.api-key` 与 `nook.stripe.*` 默认为空。三种填法任选：
 
@@ -71,6 +71,7 @@ scripts/nacos/push-shared-config.sh      # 默认 http://localhost:8848，无鉴
 
 > 不配也能启动；AI 对话会报模型错误，Stripe 相关接口返回「支付未配置」。
 > nook-pay 也支持 `--spring.profiles.active=local` 加载 `nook-pay/application-local.yml`（已 gitignore）。
+> Stripe 建议使用只开放 Customer、Checkout Session、Subscription 与 Billing Portal 所需权限的 `rk_` restricted key。Webhook 还需单独配置 `whsec_` 签名密钥。
 
 ---
 
@@ -156,6 +157,8 @@ pnpm dev
 - **服务连不上 Nacos** → 确认 `docker compose ps` 里 `nook-nacos` 是 Up；Nacos 首启较慢（~30s）。
 - **登录后请求全 401** → `nook-shared.yml` 里 `nook.jwt.secret` 变过但只推了一半，或某服务起在配置推送之前。重推脚本 + 重启 auth/gateway。
 - **AI 报模型错误 / Stripe 报未配置** → `nook-shared.yml` 里对应 key 为空，按第 4 步填。
+- **Stripe 回跳后仍显示 Free** → 确认 success URL 保留 `{CHECKOUT_SESSION_ID}`，并检查 `/pay/subscription/sync` 与 Webhook 日志。
+- **Stripe Webhook 一直重试** → 核对 endpoint API 版本与项目 Stripe SDK、签名密钥，以及 [Stripe 上线清单](docs/stripe/go-live.md) 中要求的事件列表。
 - **多实例消息广播** → 默认 `nook.im.mq.enabled=true` 走 RabbitMQ；单机不想起 broker 可在 `nook-im/application.yml` 设 `false` 走进程内直推。
 
 ---

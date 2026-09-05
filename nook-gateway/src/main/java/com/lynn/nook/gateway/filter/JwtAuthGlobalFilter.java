@@ -45,6 +45,11 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
+        // 内部服务接口只允许 Nacos 服务发现后的直连调用，不暴露到公网网关。
+        if (path.equals("/pay/internal") || path.startsWith("/pay/internal/")) {
+            return jsonError(exchange, HttpStatus.NOT_FOUND, 404, "Not Found");
+        }
+
         // CORS 预检请求无 Authorization 头，直接放行
         if (HttpMethod.OPTIONS.equals(request.getMethod())) {
             return chain.filter(exchange);
@@ -101,10 +106,14 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, ResultCode rc) {
+        return jsonError(exchange, HttpStatus.UNAUTHORIZED, rc.getCode(), rc.getMessage());
+    }
+
+    private Mono<Void> jsonError(ServerWebExchange exchange, HttpStatus status, int code, String message) {
         ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String body = "{\"code\":" + rc.getCode() + ",\"message\":\"" + rc.getMessage() + "\"}";
+        String body = "{\"code\":" + code + ",\"message\":\"" + message + "\"}";
         DataBuffer buf = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buf));
     }

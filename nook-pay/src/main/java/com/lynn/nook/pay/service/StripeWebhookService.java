@@ -3,33 +3,28 @@ package com.lynn.nook.pay.service;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.pay.config.StripeProperties;
-import com.lynn.nook.pay.entity.PaymentOrder;
-import com.lynn.nook.pay.entity.StripeCustomer;
-import com.lynn.nook.pay.entity.StripeEvent;
-import com.lynn.nook.pay.entity.Subscription;
-import com.lynn.nook.pay.mapper.PaymentOrderMapper;
-import com.lynn.nook.pay.mapper.StripeCustomerMapper;
-import com.lynn.nook.pay.mapper.StripeEventMapper;
-import com.lynn.nook.pay.mapper.SubscriptionMapper;
+import com.lynn.nook.pay.entity.PaymentCheckoutSession;
+import com.lynn.nook.pay.gateway.StripeGateway;
+import com.lynn.nook.pay.mapper.PaymentCheckoutSessionMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.stripe.exception.SignatureVerificationException;
+import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
+import com.stripe.model.HasId;
+import com.stripe.model.Invoice;
 import com.stripe.model.StripeObject;
-import com.stripe.model.SubscriptionItem;
-import com.stripe.net.Webhook;
+import com.stripe.model.checkout.Session;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
 
 /**
- * Stripe Webhook 处理：验签 -> 幂等去重 -> 按事件类型落地。
- * 「付款成功 / 订阅状态」以这里为唯一可信来源，前端跳转成功页不代表真付款。
+ * Stripe Webhook：验签、事务内原子去重、乱序安全的订阅/账单快照同步。
+ * 任何无法安全处理的已知事件都抛出异常，让 Stripe 重试，而不是静默丢失支付事实。
  */
 @Slf4j
 @Service
@@ -37,162 +32,121 @@ import java.util.List;
 public class StripeWebhookService {
 
     private final StripeProperties props;
-    private final StripeEventMapper eventMapper;
-    private final PaymentOrderMapper orderMapper;
-    private final SubscriptionMapper subscriptionMapper;
-    private final StripeCustomerMapper customerMapper;
+    private final StripeGateway stripe;
+    private final WebhookEventStore eventStore;
+    private final BillingStateService billingStateService;
+    private final PaymentCheckoutSessionMapper checkoutMapper;
+    private final MeterRegistry meterRegistry;
 
-    /**
-     * 入口：校验签名并分发处理。验签失败抛业务异常（控制器转 4xx）。
-     * 业务处理本身的异常向上抛出，让控制器返回非 2xx，Stripe 会自动重试。
-     */
     @Transactional
     public void handle(String payload, String signature) {
-        if (props.getWebhookSecret() == null || props.getWebhookSecret().isBlank()) {
-            throw new BusinessException(ResultCode.PAY_NOT_CONFIGURED);
-        }
+        requireWebhookConfigured(signature);
 
         Event event;
         try {
-            event = Webhook.constructEvent(payload, signature, props.getWebhookSecret());
+            event = stripe.constructWebhookEvent(payload, signature);
         } catch (SignatureVerificationException e) {
-            log.warn("Stripe Webhook 验签失败: {}", e.getMessage());
+            meterRegistry.counter("nook.pay.webhook.events", "type", "signature", "outcome", "rejected")
+                    .increment();
+            log.warn("Stripe Webhook 验签失败");
             throw new BusinessException(ResultCode.PAY_WEBHOOK_SIGNATURE_INVALID);
         }
 
-        // 幂等：Stripe 会重试投递，已处理过的 event 直接跳过
-        if (alreadyProcessed(event.getId())) {
-            log.debug("重复事件已忽略 event={} type={}", event.getId(), event.getType());
+        StripeObject object = event.getDataObjectDeserializer().getObject()
+                .orElseThrow(() -> new BusinessException(ResultCode.PAY_WEBHOOK_EVENT_INVALID));
+        String objectId = object instanceof HasId hasId ? hasId.getId() : null;
+        if (!eventStore.claim(event, objectId)) {
+            meterRegistry.counter("nook.pay.webhook.events", "type", event.getType(), "outcome", "duplicate")
+                    .increment();
             return;
         }
 
+        try {
+            dispatch(event, object);
+            meterRegistry.counter("nook.pay.webhook.events", "type", event.getType(), "outcome", "processed")
+                    .increment();
+        } catch (RuntimeException e) {
+            meterRegistry.counter("nook.pay.webhook.events", "type", event.getType(), "outcome", "failed")
+                    .increment();
+            throw e;
+        }
+    }
+
+    private void dispatch(Event event, StripeObject object) {
+        long created = event.getCreated() == null ? 0L : event.getCreated();
         switch (event.getType()) {
-            case "checkout.session.completed" -> handleCheckoutCompleted(event);
-            case "customer.subscription.created",
-                 "customer.subscription.updated",
-                 "customer.subscription.deleted" -> handleSubscriptionChange(event);
-            default -> log.debug("未处理的事件类型 type={}", event.getType());
+            case "checkout.session.completed", "checkout.session.expired",
+                 "checkout.session.async_payment_failed" -> handleCheckout(event, requireType(object, Session.class), created);
+            case "customer.subscription.created", "customer.subscription.updated",
+                 "customer.subscription.deleted", "customer.subscription.paused",
+                 "customer.subscription.resumed" -> syncAuthoritativeSubscription(
+                    event, requireType(object, com.stripe.model.Subscription.class), created);
+            case "invoice.created", "invoice.finalized", "invoice.finalization_failed",
+                 "invoice.paid", "invoice.payment_failed", "invoice.payment_action_required",
+                 "invoice.voided", "invoice.marked_uncollectible" -> syncAuthoritativeInvoice(
+                    event, requireType(object, Invoice.class), created);
+            default -> log.debug("忽略未订阅的 Stripe 事件 type={} event={}", event.getType(), event.getId());
         }
-
-        recordProcessed(event);
     }
 
-    // ---- 一次性付款 ----
-
-    private void handleCheckoutCompleted(Event event) {
-        StripeObject obj = event.getDataObjectDeserializer().getObject().orElse(null);
-        if (!(obj instanceof com.stripe.model.checkout.Session session)) {
-            log.warn("checkout.session.completed 反序列化失败 event={}", event.getId());
-            return;
+    private void syncAuthoritativeSubscription(Event event, com.stripe.model.Subscription snapshot, long created) {
+        try {
+            billingStateService.syncSubscription(stripe.retrieveSubscription(snapshot.getId()), created);
+        } catch (StripeException e) {
+            throw stripeReadFailure(event, "subscription", snapshot.getId(), e);
         }
-        // 订阅模式的会话由 customer.subscription.* 负责落地，这里只处理一次性付款
-        if (!"payment".equals(session.getMode())) {
-            return;
-        }
-        String orderPublicId = session.getMetadata() == null ? null
-                : session.getMetadata().get("orderPublicId");
-        if (orderPublicId == null) {
-            log.warn("一次性付款会话缺少 orderPublicId session={}", session.getId());
-            return;
-        }
-        PaymentOrder order = orderMapper.selectOneByQuery(
-                QueryWrapper.create().where("public_id = ?", orderPublicId));
-        if (order == null) {
-            log.warn("找不到本地订单 orderPublicId={}", orderPublicId);
-            return;
-        }
-        if ("PAID".equals(order.getStatus())) {
-            return; // 已处理
-        }
-        order.setStatus("PAID");
-        order.setStripePaymentIntentId(session.getPaymentIntent());
-        order.setAmountTotal(session.getAmountTotal());
-        order.setCurrency(session.getCurrency());
-        order.setPaidAt(OffsetDateTime.now());
-        order.setUpdatedAt(OffsetDateTime.now());
-        orderMapper.update(order);
-
-        log.info("订单已支付 orderPublicId={} userId={} amount={} {}",
-                orderPublicId, order.getUserId(), order.getAmountTotal(), order.getCurrency());
-
-        // TODO: 在此发放权益（充值点数 / 解锁功能）。建议改为发领域事件，由对应服务消费，
-        //       保持 nook-pay 只负责「记录支付事实」，不耦合具体业务。
     }
 
-    // ---- 订阅 ----
-
-    private void handleSubscriptionChange(Event event) {
-        StripeObject obj = event.getDataObjectDeserializer().getObject().orElse(null);
-        if (!(obj instanceof com.stripe.model.Subscription sub)) {
-            log.warn("subscription 事件反序列化失败 event={}", event.getId());
-            return;
+    private void syncAuthoritativeInvoice(Event event, Invoice snapshot, long created) {
+        try {
+            billingStateService.syncInvoice(stripe.retrieveInvoice(snapshot.getId()), event.getType(), created);
+        } catch (StripeException e) {
+            throw stripeReadFailure(event, "invoice", snapshot.getId(), e);
         }
-        Long userId = userIdByCustomer(sub.getCustomer());
-        if (userId == null) {
-            log.warn("订阅找不到对应用户 customer={}", sub.getCustomer());
-            return;
+    }
+
+    private void handleCheckout(Event event, Session session, long created) {
+        PaymentCheckoutSession local = checkoutMapper.selectOneByQuery(QueryWrapper.create()
+                .where("stripe_session_id = ?", session.getId()));
+        if (local != null) {
+            local.setStatus(session.getStatus());
+            local.setPaymentStatus(session.getPaymentStatus());
+            local.setUpdatedAt(OffsetDateTime.now());
+            checkoutMapper.update(local);
         }
 
-        Subscription row = subscriptionMapper.selectOneByQuery(
-                QueryWrapper.create().where("stripe_subscription_id = ?", sub.getId()));
-        boolean isNew = row == null;
-        if (isNew) {
-            row = new Subscription();
-            row.setUserId(userId);
-            row.setStripeCustomerId(sub.getCustomer());
-            row.setStripeSubscriptionId(sub.getId());
-            row.setCreatedAt(OffsetDateTime.now());
-        }
-        row.setStatus(sub.getStatus());
-        row.setCancelAtPeriodEnd(sub.getCancelAtPeriodEnd());
-
-        List<SubscriptionItem> items = sub.getItems() == null ? null : sub.getItems().getData();
-        if (items != null && !items.isEmpty()) {
-            SubscriptionItem item = items.getFirst();
-            if (item.getPrice() != null) {
-                row.setPriceId(item.getPrice().getId());
-            }
-            // 计费周期结束时间在新版 API 中位于 subscription item 上
-            if (item.getCurrentPeriodEnd() != null) {
-                row.setCurrentPeriodEnd(toOffset(item.getCurrentPeriodEnd()));
+        if ("checkout.session.completed".equals(event.getType())
+                && "subscription".equals(session.getMode())
+                && session.getSubscription() != null) {
+            try {
+                // 重新读取权威对象，避免 Checkout 与 subscription 事件到达顺序影响本地状态。
+                billingStateService.syncSubscription(stripe.retrieveSubscription(session.getSubscription()), created);
+            } catch (StripeException e) {
+                throw stripeReadFailure(event, "subscription", session.getSubscription(), e);
             }
         }
-        row.setUpdatedAt(OffsetDateTime.now());
+    }
 
-        if (isNew) {
-            subscriptionMapper.insert(row);
-        } else {
-            subscriptionMapper.update(row);
+    private IllegalStateException stripeReadFailure(Event event, String resource, String resourceId,
+                                                    StripeException error) {
+        log.error("Webhook 拉取 Stripe 对象失败 event={} resource={} resourceId={} stripeRequestId={}",
+                event.getId(), resource, resourceId, error.getRequestId(), error);
+        return new IllegalStateException("Failed to retrieve Stripe " + resource, error);
+    }
+
+    private void requireWebhookConfigured(String signature) {
+        if (props.getWebhookSecret() == null || props.getWebhookSecret().isBlank()) {
+            throw new BusinessException(ResultCode.PAY_NOT_CONFIGURED);
         }
-        log.info("订阅已同步 userId={} sub={} status={} cancelAtEnd={}",
-                userId, sub.getId(), sub.getStatus(), sub.getCancelAtPeriodEnd());
-
-        // TODO: 按 status/到期时间发放或回收会员权益。
+        if (signature == null || signature.isBlank()) {
+            throw new BusinessException(ResultCode.PAY_WEBHOOK_SIGNATURE_INVALID);
+        }
     }
 
-    // ---- 工具 ----
-
-    private Long userIdByCustomer(String customerId) {
-        if (customerId == null) return null;
-        StripeCustomer mapping = customerMapper.selectOneByQuery(
-                QueryWrapper.create().where("stripe_customer_id = ?", customerId));
-        return mapping == null ? null : mapping.getUserId();
-    }
-
-    private boolean alreadyProcessed(String eventId) {
-        return eventMapper.selectCountByQuery(
-                QueryWrapper.create().where("event_id = ?", eventId)) > 0;
-    }
-
-    private void recordProcessed(Event event) {
-        StripeEvent rec = new StripeEvent();
-        rec.setEventId(event.getId());
-        rec.setType(event.getType());
-        rec.setReceivedAt(OffsetDateTime.now());
-        eventMapper.insert(rec);
-    }
-
-    private static OffsetDateTime toOffset(Long epochSeconds) {
-        return OffsetDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), ZoneOffset.UTC);
+    private static <T> T requireType(StripeObject object, Class<T> expected) {
+        if (!expected.isInstance(object)) {
+            throw new BusinessException(ResultCode.PAY_WEBHOOK_EVENT_INVALID);
+        }
+        return expected.cast(object);
     }
 }

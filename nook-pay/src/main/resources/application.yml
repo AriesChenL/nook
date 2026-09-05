@@ -5,7 +5,7 @@ spring:
   application:
     name: nook-pay
 
-  # DataSource / Redis / Stripe 密钥来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
+  # DataSource / Stripe 密钥来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
   # 本地也可用 --spring.profiles.active=local 加载 application-local.yml 里的 test key（已 gitignore）。
 
   # Flyway：迁移脚本在 nook-common 的 classpath:db/migration
@@ -35,19 +35,26 @@ mybatis-flex:
 # Stripe：api-key / webhook-secret 在 nook-shared.yml；这里只放本服务的回跳地址与套餐映射（非敏感）
 nook:
   stripe:
-    success-url: ${NOOK_WEB_BASE_URL:http://localhost:5173}/subscription?checkout=success
+    success-url: "${NOOK_WEB_BASE_URL:http://localhost:5173}/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}"
     cancel-url: ${NOOK_WEB_BASE_URL:http://localhost:5173}/subscription?checkout=cancel
     portal-return-url: ${NOOK_WEB_BASE_URL:http://localhost:5173}/subscription
+    max-network-retries: 2
+    connect-timeout-millis: 10000
+    read-timeout-millis: 30000
+    webhook-tolerance-seconds: 300
+    allow-promotion-codes: true
+    automatic-tax-enabled: ${STRIPE_AUTOMATIC_TAX_ENABLED:false}
+    subscription-products:
+      - pro_monthly
     prices:
-      # 套餐/商品编码 -> Stripe Price id（test 模式，由 stripe-cli 创建）
+      # 订阅套餐编码 -> Stripe Price id。一次性商品不在本项目支付边界内。
       pro_monthly: ${STRIPE_PRICE_PRO_MONTHLY:price_1Tfe8L4Ebn0s1rOwDvw2L0yi}   # 订阅：月度会员 $9.99/月
-      credits_100: ${STRIPE_PRICE_CREDITS_100:price_1Tfe8O4Ebn0s1rOwOQcWVuKX}   # 一次性：100 点数 $4.99
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       show-details: always

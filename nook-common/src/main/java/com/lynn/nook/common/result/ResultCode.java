@@ -60,7 +60,12 @@ public enum ResultCode {
     PAY_STRIPE_ERROR(5002, "支付渠道调用失败"),
     PAY_WEBHOOK_SIGNATURE_INVALID(5003, "Webhook 签名校验失败"),
     PAY_NOT_CONFIGURED(5004, "支付功能未正确配置"),
-    PAY_SUBSCRIPTION_NOT_FOUND(5005, "未找到有效订阅");
+    PAY_SUBSCRIPTION_NOT_FOUND(5005, "未找到有效订阅"),
+    PAY_SUBSCRIPTION_ALREADY_EXISTS(5006, "已有订阅，请前往订阅管理页操作"),
+    PAY_CHECKOUT_NOT_FOUND(5007, "支付会话不存在"),
+    PAY_CHECKOUT_FORBIDDEN(5008, "无权访问该支付会话"),
+    PAY_IDEMPOTENCY_KEY_INVALID(5009, "Idempotency-Key 格式不正确"),
+    PAY_WEBHOOK_EVENT_INVALID(5010, "Webhook 事件内容无效");
 
     private final int code;
     private final String message;

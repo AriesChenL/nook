@@ -30,6 +30,9 @@ public class Subscription {
     @Column("price_id")
     private String priceId;
 
+    @Column("product_code")
+    private String productCode;
+
     /** Stripe 订阅状态：active / trialing / past_due / canceled / unpaid 等。 */
     private String status;
 
@@ -40,6 +43,18 @@ public class Subscription {
     /** 是否在周期结束时取消（用户点了取消但仍享受到期）。 */
     @Column("cancel_at_period_end")
     private Boolean cancelAtPeriodEnd;
+
+    @Column("latest_invoice_id")
+    private String latestInvoiceId;
+
+    @Column("trial_end")
+    private OffsetDateTime trialEnd;
+
+    @Column("canceled_at")
+    private OffsetDateTime canceledAt;
+
+    @Column("last_event_created")
+    private Long lastEventCreated;
 
     @Column("created_at")
     private OffsetDateTime createdAt;

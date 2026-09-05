@@ -7,13 +7,16 @@ import java.time.OffsetDateTime;
 /**
  * 订阅对外视图。供前端展示「当前套餐 / 到期时间 / 是否已取消」。
  */
-public record SubscriptionVO(String priceId,
+public record SubscriptionVO(String productCode,
+                             String priceId,
                              String status,
                              OffsetDateTime currentPeriodEnd,
-                             Boolean cancelAtPeriodEnd) {
+                             Boolean cancelAtPeriodEnd,
+                             OffsetDateTime trialEnd,
+                             OffsetDateTime canceledAt) {
 
     public static SubscriptionVO from(Subscription s) {
-        return new SubscriptionVO(s.getPriceId(), s.getStatus(),
-                s.getCurrentPeriodEnd(), s.getCancelAtPeriodEnd());
+        return new SubscriptionVO(s.getProductCode(), s.getPriceId(), s.getStatus(),
+                s.getCurrentPeriodEnd(), s.getCancelAtPeriodEnd(), s.getTrialEnd(), s.getCanceledAt());
     }
 }

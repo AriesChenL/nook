@@ -5,7 +5,6 @@ package com.lynn.nook.pay.dto;
  *
  * @param checkoutUrl   Stripe Checkout 跳转地址
  * @param sessionId     Stripe Checkout Session id
- * @param orderPublicId 本地订单号（订阅场景为 null）
  */
-public record CheckoutResponse(String checkoutUrl, String sessionId, String orderPublicId) {
+public record CheckoutResponse(String checkoutUrl, String sessionId) {
 }

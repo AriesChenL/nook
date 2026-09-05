@@ -2,7 +2,7 @@
 
 > 即时通讯（单聊 / 群聊）+ AI 助手 的全栈微服务平台。后端 Spring Boot 微服务，前端 Vue 3 SPA，所有请求统一经网关鉴权后转发。
 
-**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话 + 免费版额度）+ `nook-pay` Stripe 订阅/权益闭环（含前端订阅页）已落地，161 个单测全绿，已真实环境端到端验证。
+**状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话 + 免费版额度）+ `nook-pay` Stripe 订阅/权益闭环（含前端订阅页）已落地，176 个单测全绿。
 
 > 🚀 想直接跑起来？看 **[QUICKSTART.md](QUICKSTART.md)**（10 分钟从零启动）。
 
@@ -57,7 +57,7 @@
 | `nook-user` | 用户资料 + 好友关系全流程 |
 | `nook-im` | IM：单聊/群聊会话、消息、WebSocket、在线状态、撤回、已读、文件/图片消息（RustFS 直传） |
 | `nook-ai` | AI：用户私有 Agent（agentscope-harness）+ 同 owner 多 Agent 共享长期记忆，100% 入 PG；免费版额度限制 |
-| `nook-pay` | 支付：Stripe 一次性付款 / 订阅 + Webhook + `GET /pay/internal/entitlement/{userId}` 权益查询 |
+| `nook-pay` | 支付：Stripe Checkout 订阅 + Billing Portal + Webhook/回跳双通道对账 + 账单历史 + 权益查询 |
 | `nook-web` | 前端 Vue 3 SPA |
 
 ---
@@ -112,9 +112,13 @@
 - **免费版额度**：非付费用户 Agent 数 / 每日对话轮数受限（`nook.ai.quota.free.*`，默认 3 / 20）；权益经 `nook-pay` 的 `GET /pay/internal/entitlement/{userId}` 查询，`active` 即 pro 不限；查询失败时 **fail-open**（放行不限流，不误伤付费用户）
 
 ### 💳 支付 & 订阅（nook-pay）
-- **Stripe**：一次性付款 / 订阅 Checkout、Billing Portal；Webhook 验签 → 幂等去重（`stripe_event` 表）→ 落地订单 `PAID` / 订阅状态同步
+- **Stripe Billing**：订阅 Checkout + Billing Portal；动态支付方式由 Dashboard 配置，不在代码里锁死银行卡
+- **可靠同步**：Webhook 签名时间窗校验、事务内原子去重、事件乱序保护；成功回跳会主动从 Stripe 拉取权威订阅状态，Webhook 仍是长期事实同步主路径
+- **订阅状态**：同步 `active/trialing/past_due/unpaid/paused/canceled`、周期、试用和取消信息；重复订阅会被阻止并引导到 Billing Portal
+- **账单历史**：同步 invoice 成功、失败、需验证、作废与坏账事件；前端展示最近 50 张账单及 Stripe 托管页/PDF
 - **权益内部接口**：`GET /pay/internal/entitlement/{userId}` → `{plan: free|pro, active, until}`，供 nook-ai 等按套餐限流
-- **前端订阅页**：`/subscription`（个人资料页「会员与订阅」入口）——当前套餐 / 状态 / 续费日；免费用户「升级到 Pro」跳 Checkout，Pro 用户「管理订阅」跳 Billing Portal；`?checkout=success|cancel` 回跳提示。后端 `nook.stripe.successUrl`/`cancelUrl` 需指向 `<web>/subscription?checkout=success|cancel`
+- **产品边界**：当前只支持 `pro_monthly` 月订阅，不开放一次性积分付款，避免收款后无交付
+- **前端订阅页**：`/subscription` 展示套餐、续费/取消状态和账单；异常订阅进入 Billing Portal 修复支付方式
 
 ### 🚪 网关（nook-gateway）
 - 路由转发 + JWT 鉴权 + Redis token 校验 + 注入 `X-User-Id` / `X-Username` + CORS + WebSocket `?access_token=` 兼容 + OPTIONS 放行
@@ -251,11 +255,13 @@ pnpm dev        # http://localhost:5173
 ### 支付 `/pay/*`
 | Method | Path | 说明 |
 |---|---|---|
-| POST | `/pay/checkout/one-time` · `/pay/checkout/subscription` | 创建 Stripe Checkout，返回跳转地址 |
+| POST | `/pay/checkout/subscription` | 创建订阅 Checkout；建议传唯一 `Idempotency-Key` 请求头 |
 | GET | `/pay/subscription` | 当前订阅（无则 `data` 为 null） |
+| POST | `/pay/subscription/sync` | Checkout 回跳后以 `sessionId` 主动对账 |
 | POST | `/pay/portal` | 打开 Billing Portal 自助管理订阅 |
+| GET | `/pay/invoices` | 最近 50 张账单及 Stripe 托管页/PDF |
 | POST | `/pay/webhook` | Stripe 回调（无 JWT，靠 Stripe 签名校验来源） |
-| GET | `/pay/internal/entitlement/{userId}` | 服务间：查用户权益 `{plan,active,until}`（直连 `lb://nook-pay`，不经网关） |
+| GET | `/pay/internal/entitlement/{userId}` | 服务间：查用户权益 `{plan,active,until}`（直连 `lb://nook-pay`；网关显式拒绝该路径） |
 
 ---
 
@@ -284,7 +290,7 @@ pnpm dev        # http://localhost:5173
 - **JWT 密钥**：`nook-auth` 签发 / `nook-gateway` 校验，同源自 `nook-shared.yml`。**生产务必换强随机值（≥32 字节 / HS256）**。
 - **多实例广播**：`nook.im.mq.enabled=true`（默认）时新消息/撤回/在线状态走 RabbitMQ 广播 exchange（每实例一条匿名队列，各收全量）；单机若不想起 broker 可设 `false` 走进程内本地直推。
 - **Nacos 3.x**：`docker-compose` 已配 `NACOS_AUTH_*` 三件套（即使关认证也要给）。
-- **AI / Stripe 密钥**：`nook-shared.yml` 里默认为空。填法见 [QUICKSTART 第 4 步](QUICKSTART.md)（改 Nacos / 环境变量 / `nook-ai/.env` / `nook-pay` 的 `local` profile 任选）。
+- **AI / Stripe 密钥**：`nook-shared.yml` 里默认为空。Stripe 生产环境优先使用最小权限 `rk_` restricted key，环境间使用独立密钥；详见 [Stripe 上线清单](docs/stripe/go-live.md)。
 - **对象存储**：`docker-compose` 的 `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY` 须与 `nook-shared.yml` 的 `nook.storage.*` 一致；bucket 由 `nook-im` / `nook-ai` 启动自建。
 
 ---
@@ -292,15 +298,16 @@ pnpm dev        # http://localhost:5173
 ## 测试
 
 ```bash
-# 全量单测（161 用例），务必带 JDK 25
+# 全量单测，务必带 JDK 25
 JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 # 单模块（带 -am 连依赖一起编，避免用到 .m2 里过期的 nook-common）
 ./mvnw.cmd -pl nook-im -am test
 ./mvnw.cmd -pl nook-ai -am test
+./mvnw.cmd -pl nook-pay -am test
 ```
 
-覆盖：认证、好友、会话/消息/撤回/已读、会话列表内联最后一条消息、群聊管理与权限、系统消息、成员资料聚合、在线状态与初始快照、多端踢出、事件广播、全局异常、AI 共享记忆命名空间归一与 Agent CRUD/越权、AI 免费版额度校验（含 fail-open）、权益判定、Stripe Webhook 验签/幂等/订阅与一次性付款落地。
+覆盖：认证、好友、会话/消息/撤回/已读、群聊管理、在线状态、多端踢出、事件广播、AI Agent/额度，以及 Stripe Checkout 幂等、防重复订阅、Webhook 验签/原子去重/乱序保护、订阅权益和账单同步。
 
 ---
 
@@ -315,7 +322,7 @@ nook/
 ├─ nook-user/       用户 + 好友
 ├─ nook-im/         IM（单聊/群聊/WS/在线状态/文件消息）
 ├─ nook-ai/         AI（用户私有 Agent + 共享记忆，agentscope-harness）+ 免费版额度
-├─ nook-pay/        支付（Stripe 付款/订阅 + Webhook + 权益内部接口）
+├─ nook-pay/        支付（Stripe 订阅 + Portal + Webhook/对账 + 账单 + 权益）
 ├─ nook-web/        前端 Vue 3
 ├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
 ├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
@@ -336,6 +343,7 @@ nook/
 - [x] **图片/文件消息**：RustFS 预签名直传 + `contentType 2/3` + 前端气泡渲染
 - [ ] **AI 增强**：会话历史接口、memory_search 全文检索
 - [x] **nook-pay 权益闭环**：Webhook 测试 + `entitlement` 内部接口 + nook-ai 按套餐限流 + 前端订阅页（`/subscription`）
+- [x] **nook-pay 可靠性闭环**：Checkout 幂等、防重复订阅、Webhook 原子去重/乱序保护、主动对账、账单历史、支付健康与指标
 - [x] **会话列表去 N+1**：`ConversationVO` 内联 `lastMessage`（发送者脱敏 + 撤回屏蔽），前端不再逐会话拉最后一条
 - [x] **在线状态快照**：`GET /im/presence/online` 返回在线好友，前端进页面/每次 WS `ready` 后拉一次对齐（WS 只推跳变）
 - [x] **可观测**：业务服务接入 actuator 健康端点

@@ -68,6 +68,6 @@ nook:
       api-key: ${DEEPSEEK_API_KEY:}
 
   stripe:
-    # Stripe 密钥。本地填 test 模式 key（sk_test_ / whsec_），或 export STRIPE_API_KEY / STRIPE_WEBHOOK_SECRET。
+    # Stripe 服务端密钥。优先使用最小权限 restricted key（rk_）；Webhook 使用独立 whsec_ 签名密钥。
     api-key: ${STRIPE_API_KEY:}
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}

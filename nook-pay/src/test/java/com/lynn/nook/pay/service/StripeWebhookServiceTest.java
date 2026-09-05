@@ -3,288 +3,171 @@ package com.lynn.nook.pay.service;
 import com.lynn.nook.common.exception.BusinessException;
 import com.lynn.nook.common.result.ResultCode;
 import com.lynn.nook.pay.config.StripeProperties;
-import com.lynn.nook.pay.entity.PaymentOrder;
-import com.lynn.nook.pay.entity.StripeCustomer;
-import com.lynn.nook.pay.entity.StripeEvent;
-import com.lynn.nook.pay.entity.Subscription;
-import com.lynn.nook.pay.mapper.PaymentOrderMapper;
-import com.lynn.nook.pay.mapper.StripeCustomerMapper;
-import com.lynn.nook.pay.mapper.StripeEventMapper;
-import com.lynn.nook.pay.mapper.SubscriptionMapper;
+import com.lynn.nook.pay.entity.PaymentCheckoutSession;
+import com.lynn.nook.pay.gateway.StripeGateway;
+import com.lynn.nook.pay.mapper.PaymentCheckoutSessionMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.stripe.exception.SignatureVerificationException;
+import com.stripe.exception.StripeException;
 import com.stripe.model.Event;
 import com.stripe.model.EventDataObjectDeserializer;
-import com.stripe.model.Price;
-import com.stripe.model.SubscriptionItemCollection;
-import com.stripe.model.SubscriptionItem;
+import com.stripe.model.Invoice;
+import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
-import com.stripe.net.Webhook;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.MockedStatic;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/**
- * Stripe Webhook 处理：验签失败映射、幂等去重、一次性付款与订阅事件落地。
- * 验签本身（HMAC）用 mockStatic 隔离——只验证本类对结果的处理，不重测 Stripe SDK 的加密。
- */
 class StripeWebhookServiceTest {
 
-    private static final String SECRET = "whsec_test_123";
-    private static final String PAYLOAD = "{\"id\":\"evt_1\"}";
-    private static final String SIG = "t=1,v1=deadbeef";
-
     private StripeProperties props;
-    private StripeEventMapper eventMapper;
-    private PaymentOrderMapper orderMapper;
-    private SubscriptionMapper subscriptionMapper;
-    private StripeCustomerMapper customerMapper;
+    private StripeGateway stripe;
+    private WebhookEventStore eventStore;
+    private BillingStateService billingState;
+    private PaymentCheckoutSessionMapper checkoutMapper;
     private StripeWebhookService service;
 
     @BeforeEach
     void setUp() {
         props = new StripeProperties();
-        props.setWebhookSecret(SECRET);
-        eventMapper = mock(StripeEventMapper.class);
-        orderMapper = mock(PaymentOrderMapper.class);
-        subscriptionMapper = mock(SubscriptionMapper.class);
-        customerMapper = mock(StripeCustomerMapper.class);
-        service = new StripeWebhookService(props, eventMapper, orderMapper, subscriptionMapper, customerMapper);
-        // 默认：事件未处理过
-        lenient().when(eventMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(0L);
+        props.setWebhookSecret("whsec_test");
+        stripe = mock(StripeGateway.class);
+        eventStore = mock(WebhookEventStore.class);
+        billingState = mock(BillingStateService.class);
+        checkoutMapper = mock(PaymentCheckoutSessionMapper.class);
+        service = new StripeWebhookService(props, stripe, eventStore, billingState,
+                checkoutMapper, new SimpleMeterRegistry());
+        lenient().when(eventStore.claim(any(), any())).thenReturn(true);
     }
-
-    private Event mockEvent(String id, String type, Object dataObject) {
-        Event event = mock(Event.class);
-        lenient().when(event.getId()).thenReturn(id);
-        lenient().when(event.getType()).thenReturn(type);
-        EventDataObjectDeserializer deser = mock(EventDataObjectDeserializer.class);
-        lenient().when(deser.getObject()).thenReturn(Optional.ofNullable((com.stripe.model.StripeObject) dataObject));
-        lenient().when(event.getDataObjectDeserializer()).thenReturn(deser);
-        return event;
-    }
-
-    private MockedStatic<Webhook> stubConstruct(Event event) {
-        MockedStatic<Webhook> mocked = mockStatic(Webhook.class);
-        mocked.when(() -> Webhook.constructEvent(any(), any(), any())).thenReturn(event);
-        return mocked;
-    }
-
-    // ---------- 验签 / 配置 ----------
 
     @Test
-    void rejectsWhenWebhookSecretMissing() {
-        props.setWebhookSecret("  ");
-        assertThatThrownBy(() -> service.handle(PAYLOAD, SIG))
+    void rejectsMissingWebhookSecret() {
+        props.setWebhookSecret(" ");
+        assertThatThrownBy(() -> service.handle("{}", "sig"))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("code", ResultCode.PAY_NOT_CONFIGURED.getCode());
-        verifyNoInteractions(eventMapper, orderMapper, subscriptionMapper);
+        verifyNoInteractions(stripe);
     }
 
     @Test
-    void mapsSignatureFailureToBusinessError() {
-        try (MockedStatic<Webhook> mocked = mockStatic(Webhook.class)) {
-            mocked.when(() -> Webhook.constructEvent(any(), any(), any()))
-                    .thenThrow(new SignatureVerificationException("bad sig", SIG));
-
-            assertThatThrownBy(() -> service.handle(PAYLOAD, SIG))
-                    .isInstanceOf(BusinessException.class)
-                    .hasFieldOrPropertyWithValue("code", ResultCode.PAY_WEBHOOK_SIGNATURE_INVALID.getCode());
-        }
-        verify(eventMapper, never()).insert(any());
-    }
-
-    // ---------- 幂等 ----------
-
-    @Test
-    void skipsAlreadyProcessedEvent() {
-        when(eventMapper.selectCountByQuery(any(QueryWrapper.class))).thenReturn(1L);
-        Event event = mockEvent("evt_dup", "checkout.session.completed", null);
-
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        verify(eventMapper, never()).insert(any());
-        verifyNoInteractions(orderMapper, subscriptionMapper);
+    void rejectsMissingSignature() {
+        assertThatThrownBy(() -> service.handle("{}", null))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("code", ResultCode.PAY_WEBHOOK_SIGNATURE_INVALID.getCode());
     }
 
     @Test
-    void recordsUnhandledEventTypeButDoesNothingElse() {
-        Event event = mockEvent("evt_ping", "ping", null);
-
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        ArgumentCaptor<StripeEvent> cap = ArgumentCaptor.forClass(StripeEvent.class);
-        verify(eventMapper).insert(cap.capture());
-        assertThat(cap.getValue().getEventId()).isEqualTo("evt_ping");
-        assertThat(cap.getValue().getType()).isEqualTo("ping");
-        verifyNoInteractions(orderMapper, subscriptionMapper);
+    void mapsSignatureFailure() throws Exception {
+        when(stripe.constructWebhookEvent(anyString(), anyString()))
+                .thenThrow(new SignatureVerificationException("bad", "sig"));
+        assertThatThrownBy(() -> service.handle("{}", "sig"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("code", ResultCode.PAY_WEBHOOK_SIGNATURE_INVALID.getCode());
     }
 
-    // ---------- 一次性付款 ----------
+    @Test
+    void duplicateEventDoesNotRunBusinessLogic() throws Exception {
+        com.stripe.model.Subscription subscription = new com.stripe.model.Subscription();
+        subscription.setId("sub_1");
+        when(stripe.retrieveSubscription("sub_1")).thenReturn(subscription);
+        Event event = event("evt_1", "customer.subscription.updated", subscription);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+        when(eventStore.claim(event, "sub_1")).thenReturn(false);
+
+        service.handle("{}", "sig");
+
+        verifyNoInteractions(billingState);
+    }
 
     @Test
-    void checkoutCompleted_marksOrderPaid() {
+    void invalidEventObjectIsRetryableFailure() throws Exception {
+        Event event = mock(Event.class);
+        EventDataObjectDeserializer deser = mock(EventDataObjectDeserializer.class);
+        when(deser.getObject()).thenReturn(Optional.empty());
+        when(event.getDataObjectDeserializer()).thenReturn(deser);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+
+        assertThatThrownBy(() -> service.handle("{}", "sig"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("code", ResultCode.PAY_WEBHOOK_EVENT_INVALID.getCode());
+        verifyNoInteractions(eventStore);
+    }
+
+    @Test
+    void subscriptionEventSynchronizesState() throws Exception {
+        com.stripe.model.Subscription subscription = new com.stripe.model.Subscription();
+        subscription.setId("sub_1");
+        when(stripe.retrieveSubscription("sub_1")).thenReturn(subscription);
+        Event event = event("evt_1", "customer.subscription.updated", subscription);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+
+        service.handle("{}", "sig");
+
+        verify(billingState).syncSubscription(subscription, 100L);
+    }
+
+    @Test
+    void invoiceEventSynchronizesInvoice() throws Exception {
+        Invoice invoice = new Invoice();
+        invoice.setId("in_1");
+        when(stripe.retrieveInvoice("in_1")).thenReturn(invoice);
+        Event event = event("evt_2", "invoice.payment_failed", invoice);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+
+        service.handle("{}", "sig");
+
+        verify(billingState).syncInvoice(invoice, "invoice.payment_failed", 100L);
+    }
+
+    @Test
+    void completedCheckoutUpdatesLocalStateAndReadsAuthoritativeSubscription() throws Exception {
         Session session = new Session();
         session.setId("cs_1");
-        session.setMode("payment");
-        session.setMetadata(Map.of("orderPublicId", "ord_1"));
-        session.setPaymentIntent("pi_1");
-        session.setAmountTotal(990L);
-        session.setCurrency("usd");
+        session.setMode("subscription");
+        session.setStatus("complete");
+        session.setPaymentStatus("paid");
+        session.setSubscription("sub_1");
+        PaymentCheckoutSession local = new PaymentCheckoutSession();
+        when(checkoutMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(local);
+        com.stripe.model.Subscription subscription = new com.stripe.model.Subscription();
+        when(stripe.retrieveSubscription("sub_1")).thenReturn(subscription);
+        Event event = event("evt_3", "checkout.session.completed", session);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
 
-        PaymentOrder order = new PaymentOrder();
-        order.setPublicId("ord_1");
-        order.setUserId(42L);
-        order.setStatus("PENDING");
-        when(orderMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(order);
+        service.handle("{}", "sig");
 
-        Event event = mockEvent("evt_co", "checkout.session.completed", session);
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        ArgumentCaptor<PaymentOrder> cap = ArgumentCaptor.forClass(PaymentOrder.class);
-        verify(orderMapper).update(cap.capture());
-        PaymentOrder saved = cap.getValue();
-        assertThat(saved.getStatus()).isEqualTo("PAID");
-        assertThat(saved.getStripePaymentIntentId()).isEqualTo("pi_1");
-        assertThat(saved.getAmountTotal()).isEqualTo(990L);
-        assertThat(saved.getPaidAt()).isNotNull();
-        verify(eventMapper).insert(any());
+        verify(checkoutMapper).update(local);
+        verify(billingState).syncSubscription(subscription, 100L);
     }
 
     @Test
-    void checkoutCompleted_ignoresNonPaymentMode() {
+    void stripeReadFailurePropagatesSoWebhookWillRetry() throws Exception {
         Session session = new Session();
-        session.setMode("subscription"); // 订阅由 customer.subscription.* 负责
+        session.setId("cs_1");
+        session.setMode("subscription");
+        session.setSubscription("sub_1");
+        Event event = event("evt_3", "checkout.session.completed", session);
+        when(stripe.constructWebhookEvent(anyString(), anyString())).thenReturn(event);
+        when(stripe.retrieveSubscription("sub_1")).thenThrow(mock(StripeException.class));
 
-        Event event = mockEvent("evt_co2", "checkout.session.completed", session);
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        verify(orderMapper, never()).update(any());
-        verify(eventMapper).insert(any()); // 仍记录已处理
+        assertThatThrownBy(() -> service.handle("{}", "sig"))
+                .isInstanceOf(IllegalStateException.class);
     }
 
-    @Test
-    void checkoutCompleted_idempotentWhenOrderAlreadyPaid() {
-        Session session = new Session();
-        session.setMode("payment");
-        session.setMetadata(Map.of("orderPublicId", "ord_1"));
-
-        PaymentOrder order = new PaymentOrder();
-        order.setStatus("PAID");
-        when(orderMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(order);
-
-        Event event = mockEvent("evt_co3", "checkout.session.completed", session);
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        verify(orderMapper, never()).update(any());
-    }
-
-    // ---------- 订阅 ----------
-
-    private com.stripe.model.Subscription stripeSub(String id, String customer, String status,
-                                                   String priceId, Long periodEnd) {
-        com.stripe.model.Subscription sub = new com.stripe.model.Subscription();
-        sub.setId(id);
-        sub.setCustomer(customer);
-        sub.setStatus(status);
-        sub.setCancelAtPeriodEnd(false);
-
-        Price price = new Price();
-        price.setId(priceId);
-        SubscriptionItem item = new SubscriptionItem();
-        item.setPrice(price);
-        item.setCurrentPeriodEnd(periodEnd);
-        SubscriptionItemCollection items = new SubscriptionItemCollection();
-        items.setData(List.of(item));
-        sub.setItems(items);
-        return sub;
-    }
-
-    @Test
-    void subscriptionChange_insertsNewSubscription() {
-        when(customerMapper.selectOneByQuery(any(QueryWrapper.class)))
-                .thenReturn(customerMapping(7L, "cus_1"));
-        when(subscriptionMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(null);
-
-        Event event = mockEvent("evt_su", "customer.subscription.updated",
-                stripeSub("sub_1", "cus_1", "active", "price_pro", 1893456000L));
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        ArgumentCaptor<Subscription> cap = ArgumentCaptor.forClass(Subscription.class);
-        verify(subscriptionMapper).insert(cap.capture());
-        Subscription saved = cap.getValue();
-        assertThat(saved.getUserId()).isEqualTo(7L);
-        assertThat(saved.getStripeSubscriptionId()).isEqualTo("sub_1");
-        assertThat(saved.getStatus()).isEqualTo("active");
-        assertThat(saved.getPriceId()).isEqualTo("price_pro");
-        assertThat(saved.getCurrentPeriodEnd()).isNotNull();
-        verify(subscriptionMapper, never()).update(any());
-    }
-
-    @Test
-    void subscriptionChange_updatesExistingSubscription() {
-        when(customerMapper.selectOneByQuery(any(QueryWrapper.class)))
-                .thenReturn(customerMapping(7L, "cus_1"));
-        Subscription existing = new Subscription();
-        existing.setId(100L);
-        existing.setUserId(7L);
-        existing.setStripeSubscriptionId("sub_1");
-        existing.setStatus("active");
-        when(subscriptionMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(existing);
-
-        Event event = mockEvent("evt_sd", "customer.subscription.deleted",
-                stripeSub("sub_1", "cus_1", "canceled", "price_pro", 1893456000L));
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        ArgumentCaptor<Subscription> cap = ArgumentCaptor.forClass(Subscription.class);
-        verify(subscriptionMapper).update(cap.capture());
-        assertThat(cap.getValue().getStatus()).isEqualTo("canceled");
-        verify(subscriptionMapper, never()).insert(any());
-    }
-
-    @Test
-    void subscriptionChange_skipsWhenCustomerUnknown() {
-        when(customerMapper.selectOneByQuery(any(QueryWrapper.class))).thenReturn(null);
-
-        Event event = mockEvent("evt_su2", "customer.subscription.updated",
-                stripeSub("sub_x", "cus_unknown", "active", "price_pro", 1893456000L));
-        try (MockedStatic<Webhook> mocked = stubConstruct(event)) {
-            service.handle(PAYLOAD, SIG);
-        }
-
-        verify(subscriptionMapper, never()).insert(any());
-        verify(subscriptionMapper, never()).update(any());
-        verify(eventMapper).insert(any()); // 仍记录已处理，避免 Stripe 无限重投
-    }
-
-    private StripeCustomer customerMapping(Long userId, String customerId) {
-        StripeCustomer c = new StripeCustomer();
-        c.setUserId(userId);
-        c.setStripeCustomerId(customerId);
-        return c;
+    private Event event(String id, String type, StripeObject object) {
+        Event event = mock(Event.class);
+        EventDataObjectDeserializer deser = mock(EventDataObjectDeserializer.class);
+        when(deser.getObject()).thenReturn(Optional.of(object));
+        when(event.getDataObjectDeserializer()).thenReturn(deser);
+        when(event.getId()).thenReturn(id);
+        when(event.getType()).thenReturn(type);
+        when(event.getCreated()).thenReturn(100L);
+        return event;
     }
 }

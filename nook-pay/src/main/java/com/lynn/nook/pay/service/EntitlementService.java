@@ -1,5 +1,6 @@
 package com.lynn.nook.pay.service;
 
+import com.lynn.nook.pay.config.StripeProperties;
 import com.lynn.nook.pay.dto.EntitlementVO;
 import com.lynn.nook.pay.entity.Subscription;
 import com.lynn.nook.pay.mapper.SubscriptionMapper;
@@ -22,6 +23,7 @@ public class EntitlementService {
     private static final Set<String> ENTITLED_STATUSES = Set.of("active", "trialing");
 
     private final SubscriptionMapper subscriptionMapper;
+    private final StripeProperties stripeProperties;
 
     public EntitlementVO forUser(Long userId) {
         if (userId == null) return EntitlementVO.free(null);
@@ -34,9 +36,14 @@ public class EntitlementService {
         if (sub == null || sub.getStatus() == null || !ENTITLED_STATUSES.contains(sub.getStatus())) {
             return EntitlementVO.free(userId);
         }
+        // 只有服务端配置中明确允许的订阅商品才能授予 Pro，避免误把未知 Price 当成会员。
+        if (!stripeProperties.isSubscriptionProduct(sub.getProductCode())
+                || !sub.getProductCode().equals(stripeProperties.productCode(sub.getPriceId()))) {
+            return EntitlementVO.free(userId);
+        }
         // 到期时间已过仍兜底判失效（正常 Stripe 会推 customer.subscription.deleted，这里防漏）
         OffsetDateTime until = sub.getCurrentPeriodEnd();
-        if (until != null && until.isBefore(OffsetDateTime.now())) {
+        if (until == null || !until.isAfter(OffsetDateTime.now())) {
             return EntitlementVO.free(userId);
         }
         return EntitlementVO.pro(userId, until);

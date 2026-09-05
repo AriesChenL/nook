@@ -5,8 +5,11 @@ import { toast } from '@/composables/useToast'
 import {
   getSubscription,
   isPro,
+  listInvoices,
   openBillingPortal,
   startSubscriptionCheckout,
+  syncSubscription,
+  type Invoice,
   type Subscription
 } from '@/api/pay'
 
@@ -14,10 +17,12 @@ const route = useRoute()
 const router = useRouter()
 
 const sub = ref<Subscription | null>(null)
+const invoices = ref<Invoice[]>([])
 const loading = ref(true)
 const acting = ref(false)
 
 const pro = computed(() => isPro(sub.value))
+const manageable = computed(() => sub.value != null && !['canceled', 'incomplete_expired'].includes(sub.value.status))
 
 const STATUS_TEXT: Record<string, string> = {
   active: '生效中',
@@ -25,8 +30,18 @@ const STATUS_TEXT: Record<string, string> = {
   past_due: '扣款失败',
   canceled: '已取消',
   incomplete: '待完成',
+  incomplete_expired: '支付未完成',
   unpaid: '欠费',
   paused: '已暂停'
+}
+
+const INVOICE_EVENT_TEXT: Record<string, string> = {
+  'invoice.paid': '已支付',
+  'invoice.payment_failed': '扣款失败',
+  'invoice.payment_action_required': '需要支付验证',
+  'invoice.finalization_failed': '账单生成失败',
+  'invoice.voided': '已作废',
+  'invoice.marked_uncollectible': '坏账'
 }
 
 function fmtDate(iso: string | null): string {
@@ -37,12 +52,22 @@ function fmtDate(iso: string | null): string {
 async function load() {
   loading.value = true
   try {
-    sub.value = await getSubscription()
+    ;[sub.value, invoices.value] = await Promise.all([getSubscription(), listInvoices()])
   } catch (e: any) {
     toast.error(e?.message ?? '加载订阅信息失败')
   } finally {
     loading.value = false
   }
+}
+
+function fmtAmount(amount: number | null, currency: string | null): string {
+  if (amount == null || !currency) return '—'
+  const formatter = new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: currency.toUpperCase()
+  })
+  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2
+  return formatter.format(amount / 10 ** digits)
 }
 
 async function onUpgrade() {
@@ -70,12 +95,22 @@ onMounted(async () => {
   // Stripe 回跳：?checkout=success / cancel（success/cancel URL 由后端配置指向本页）
   const flag = route.query.checkout
   if (flag === 'success') {
-    toast.success('支付完成，订阅将在数秒内生效')
+    const sessionId = typeof route.query.session_id === 'string' ? route.query.session_id : null
+    if (sessionId) {
+      try {
+        sub.value = await syncSubscription(sessionId)
+        toast.success(isPro(sub.value) ? '订阅已生效' : '支付状态已同步，请稍后刷新')
+      } catch (e: any) {
+        toast.error(e?.message ?? '支付状态同步失败，请稍后刷新')
+      }
+    } else {
+      toast.success('支付已返回，正在等待订阅状态同步')
+    }
   } else if (flag === 'cancel') {
     toast.info('已取消支付')
   }
   if (flag) {
-    router.replace({ path: route.path }) // 清掉 query，避免刷新重复提示
+    await router.replace({ path: route.path }) // 清掉 query，避免刷新重复提示
   }
   await load()
 })
@@ -113,12 +148,30 @@ onMounted(async () => {
         </div>
 
         <div class="actions">
-          <button v-if="!pro" class="btn primary" :disabled="acting" @click="onUpgrade">
+          <button v-if="!pro && !manageable" class="btn primary" :disabled="acting" @click="onUpgrade">
             {{ acting ? '跳转中…' : '升级到 Pro' }}
           </button>
           <button v-else class="btn" :disabled="acting" @click="onManage">
             {{ acting ? '跳转中…' : '管理订阅' }}
           </button>
+        </div>
+      </section>
+
+      <section class="card invoices">
+        <div class="plan-name">账单记录</div>
+        <div v-if="!invoices.length" class="muted">暂无账单</div>
+        <div v-else class="invoice-list">
+          <div v-for="invoice in invoices" :key="invoice.stripeInvoiceId" class="invoice-row">
+            <div>
+              <div class="invoice-title">{{ invoice.invoiceNumber ?? 'Stripe 账单' }}</div>
+              <div class="muted">{{ fmtDate(invoice.periodEnd) }} · {{ INVOICE_EVENT_TEXT[invoice.lastEventType ?? ''] ?? invoice.status }}</div>
+            </div>
+            <div class="invoice-actions">
+              <strong>{{ fmtAmount(invoice.amountPaid ?? invoice.amountDue, invoice.currency) }}</strong>
+              <a v-if="invoice.hostedInvoiceUrl" :href="invoice.hostedInvoiceUrl" target="_blank" rel="noopener">查看</a>
+              <a v-if="invoice.invoicePdf" :href="invoice.invoicePdf" target="_blank" rel="noopener">PDF</a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -249,4 +302,11 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--ink-3);
 }
+.invoice-list { margin-top: 12px; border-top: 1px solid var(--line); }
+.invoice-row { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.invoice-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.invoice-row .muted { margin-top: 3px; }
+.invoice-actions { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.invoice-actions strong { color: var(--ink); }
+.invoice-actions a { color: var(--primary); text-decoration: none; }
 </style>

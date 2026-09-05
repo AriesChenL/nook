@@ -33,6 +33,7 @@
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <argLine></argLine>
         <lombok.version>1.18.46</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <agentscope.version>2.0.2</agentscope.version>
@@ -40,7 +41,7 @@
         <spring-cloud.version>2025.1.1</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
         <aws-sdk.version>2.28.16</aws-sdk.version>
-        <stripe.version>29.2.0</stripe.version>
+        <stripe.version>33.4.1</stripe.version>
     </properties>
 
     <dependencyManagement>
@@ -170,6 +171,16 @@
     </dependencies>
 
     <build>
+        <plugins>
+            <!-- JDK 25 禁止 Mockito 默认的运行时自挂载；按 Mockito 官方建议在测试 JVM 启动时加载 agent。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>@{argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>

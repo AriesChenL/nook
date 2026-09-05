@@ -37,7 +37,7 @@ public class StripeWebhookController {
      */
     @PostMapping
     public ResponseEntity<String> receive(@RequestBody String payload,
-                                          @RequestHeader("Stripe-Signature") String signature) {
+                                          @RequestHeader(value = "Stripe-Signature", required = false) String signature) {
         try {
             webhookService.handle(payload, signature);
             return ResponseEntity.ok("ok");
