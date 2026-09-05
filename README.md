@@ -5,6 +5,7 @@
 **状态**：IM 全功能可用（单聊 + 群聊 + 实时推送 + 在线状态 + 文件/图片消息）+ `nook-ai` 用户私有 AI Agent（共享长期记忆 + 流式对话 + 免费版额度）+ `nook-pay` Stripe 订阅/权益闭环（含前端订阅页）已落地，176 个单测全绿。
 
 > 🚀 想直接跑起来？看 **[QUICKSTART.md](QUICKSTART.md)**（10 分钟从零启动）。
+> 🤖 使用 Codex、Claude 等 Agent 开发前，请先阅读 **[AGENTS.md](AGENTS.md)**（项目架构、代码风格、测试与提交规范）。
 
 ---
 
@@ -315,6 +316,7 @@ JAVA_HOME=/path/to/jdk-25 ./mvnw.cmd test
 
 ```
 nook/
+├─ AGENTS.md         Agent 开发规范（架构/风格/测试/交付）
 ├─ nook-common/     公共件
 ├─ nook-starter/    内部平台启动器（业务服务共用依赖聚合）
 ├─ nook-gateway/    网关
