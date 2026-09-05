@@ -92,16 +92,156 @@ Nook 是一个 Maven 多模块后端加独立 Vue SPA：
 - 第三方 SDK 调用放在 gateway/adapter 类中，便于测试替换，禁止把 SDK 静态全局状态散落在 Service。
 - 新增公共工具前先搜索现有实现；只有两个以上模块真正共用时才放入 `nook-common`。
 
-### 5.3 命名与可读性
+### 5.3 命名规则
+
+所有新代码和被本任务修改的代码必须遵守下表。历史文件存在不一致时，只整理本次触及的代码，不发起无关的全仓格式化。
+
+| 对象 | 规则 | 正例 | 反例 |
+|---|---|---|---|
+| package | 全小写，按 `com.lynn.nook.<module>.<layer>` 分层 | `com.lynn.nook.pay.service` | `com.lynn.nook.Pay.Service` |
+| class / interface / record / enum | `PascalCase` | `PaymentService`、`InvoiceVO` | `paymentService`、`InvoiceVo` |
+| method | `lowerCamelCase`，使用动词或动宾结构 | `createSubscriptionCheckout()` | `subscriptionCheckout()`、`doIt()` |
+| field / parameter / local variable | `lowerCamelCase`，使用名词或清晰语义 | `stripeCustomerId` | `stripe_customer_id`、`scid` |
+| constant / enum 内常量 | `UPPER_SNAKE_CASE` | `RECALL_WINDOW` | `recallWindow`、`RecallWindow` |
+| generic type parameter | 简单类型用单个大写字母，复杂语义用 PascalCase | `T`、`ID` | `tValue` |
+| test class | 被测类名 + `Test` | `PaymentServiceTest` | `TestPaymentService` |
+| test method | 行为 + 条件 + 结果，使用 lowerCamelCase | `duplicateEventDoesNotRunBusinessLogic()` | `test1()` |
+
+具体约定：
 
 - 包、类、方法、变量使用英文；业务 JavaDoc 和必要注释使用简洁中文。
-- 方法名表达行为与结果，例如 `createSubscriptionCheckout`、`requireMember`、`syncInvoice`。
-- 布尔字段和方法使用 `is/has/can/should` 语义。
-- 不使用含糊缩写；`req`、`vo`、`id` 等局部且语义明确的短名可以保留。
-- 注释解释“为什么”和边界，不逐行翻译代码。
-- 优先使用 JDK 25 已支持的 record、模式匹配 switch、`getFirst()`、`getLast()` 和 Sequenced Collections，但不能为了新语法牺牲可读性。
+- 类型后缀表达分层职责：`Controller`、`Service`、`Mapper`、`Client`、`Gateway`、`Config`、`Properties`、`Entity`、`Request`、`Response`、`VO`、`Event`、`Exception`。
+- Mapper 接口使用业务实体名 + `Mapper`，不要增加无意义的 `I` 前缀。
+- 方法名表达行为与结果，例如 `createSubscriptionCheckout`、`requireMember`、`syncInvoice`；查询方法使用 `get/find/list/count/exists` 区分返回语义。
+- `getXxx` 表示应当存在或按当前契约允许返回 null；`findXxx` 表示可能不存在；集合查询使用 `listXxx`，不要用 `getXxxList`。
+- 校验并在失败时抛异常的方法使用 `requireXxx`；只返回布尔值的校验使用 `is/has/can`。
+- 布尔字段使用肯定语义，例如 `active`、`enabled`、`cancelAtPeriodEnd`；避免 `notDisabled`、`noError` 等双重否定。
+- 常见缩写按单词处理：`JwtUtil`、`SseEmitter`、`apiKey`、`userId`、`avatarUrl`；协议或品牌已有固定拼写时保持项目现状，例如 `WebSocket`、`Stripe`、`S3Config`。
+- 不使用含糊缩写；`req`、`vo`、`id` 只允许用于作用域很小且语义明确的局部变量。
+- 不使用 `data`、`info`、`obj`、`tmp`、`handle()`、`process()` 等泛化命名，除非上下文已经唯一明确其含义。
+- 集合变量使用复数名，例如 `memberIds`、`subscriptions`；Map 名称体现 key/value 关系，例如 `usersById`。
+- 单位必须进入名称，例如 `expireMillis`、`timeoutSeconds`、`amountMinorUnits`，禁止只写 `timeout`、`amount` 后依赖注释猜单位。
 
-### 5.4 错误与日志
+### 5.4 Import 与全限定类名
+
+- 正常类型必须在文件头通过 `import` 引入，业务代码中禁止直接书写全限定类名。
+- 禁止通配符 import，包括 `import xxx.*` 和 `import static xxx.*`。新代码显式列出实际使用的类型和静态方法。
+- 禁止保留未使用、重复或来自旧包名的 import。
+- 同一文件只 import 一个同简单名类型。Java 不支持 import alias，两个类型重名时允许对较少使用的那个类型书写全限定类名，这是唯一常规例外。
+- 全限定类名例外的典型场景是本地 `Subscription` 与 Stripe `Subscription`、Checkout `Session` 与 Billing Portal `Session` 同时出现。不要为了消除这一处全限定名而引入含糊的自定义别名类。
+- 若同一个全限定类名在文件中反复出现三次以上，应优先重新划分 adapter、提取转换方法，或让方法返回项目自己的 DTO；确认无法改善后才保留。
+- `java.util.UUID`、`java.util.Objects`、`BusinessException`、`ResultCode` 等没有名称冲突的类型必须 import，不能在方法体内写全类名。
+- static import 只用于测试断言、Mockito DSL 或公认常量；生产业务方法不应依赖大量 static import 隐藏调用来源。
+
+Import 分组顺序固定为：
+
+1. 当前项目 `com.lynn.nook.*`。
+2. 其他第三方包，如 `com.*`、`io.*`、`jakarta.*`、`lombok.*`、`org.*`、`software.*`。
+3. JDK 包 `java.*` / `javax.*`。
+4. static import。
+
+组与组之间空一行；组内按字典序排列，不用空格手工对齐。
+
+```java
+// 推荐：普通类型通过 import 使用。
+import java.util.Objects;
+import java.util.UUID;
+
+String publicId = UUID.randomUUID().toString();
+boolean same = Objects.equals(leftId, rightId);
+```
+
+```java
+// 禁止：没有重名冲突却在业务代码中写全限定类名。
+String publicId = java.util.UUID.randomUUID().toString();
+boolean same = java.util.Objects.equals(leftId, rightId);
+```
+
+```java
+// 允许：两个 Session 类型确实重名，常用类型 import，低频类型使用全限定名。
+import com.stripe.model.checkout.Session;
+
+Session checkoutSession = stripe.retrieveCheckoutSession(sessionId);
+com.stripe.model.billingportal.Session portalSession = stripe.createBillingPortal(customerId);
+```
+
+### 5.5 文件与格式
+
+- 源文件使用 UTF-8、LF 换行和 4 个空格缩进，禁止 Tab。
+- 一个 `.java` 文件只放一个 public 顶层类型，文件名与 public 类型名完全一致。
+- 左花括号不单独换行；`else`、`catch`、`finally` 与前一个右花括号保持同一行。
+- 一行只写一个语句；禁止省略会降低可读性的花括号。
+- 每行目标不超过 120 个字符。链式调用、构造参数和条件表达式超长时按语义换行，不为了满足长度拆出无意义变量。
+- 长参数列表每行一个参数或按稳定语义分组；续行缩进保持一致。
+- 多个注解通常一行一个；同一字段上的短映射注解可以紧邻，但不能挤成难读的一行。
+- 不用多余空格做纵向对齐，因为字段名变化会制造大面积无意义 diff。
+- 方法之间空一行；同一逻辑块内部只在阶段切换时空行。
+- 删除行尾空格、注释掉的废弃代码、IDE 自动生成的无意义 JavaDoc 和未解决的调试输出。
+- 不在代码中使用 `System.out/err`；使用 SLF4J Logger。
+- TODO 必须包含明确动作和解除条件；不能用 TODO 代替当前需求必须完成的逻辑。
+
+### 5.6 类结构与成员顺序
+
+类内部按以下顺序组织：
+
+1. `static final` 常量。
+2. 其他 static 字段。
+3. 注入依赖和实例字段。
+4. 构造器（若未由 Lombok 生成）。
+5. public API 方法。
+6. package-private / protected 方法。
+7. private helper。
+8. 内部类型。
+
+其他要求：
+
+- 使用满足需求的最小可见性；默认 private，不为测试随意提升为 public。
+- 无状态工具类声明为 `final` 并提供 private 构造器；优先把行为放在有明确职责的 Service，而不是不断扩充 Utils。
+- Spring Bean 默认使用单例无状态设计。请求级数据放方法参数或明确的 request context，不能存入 Bean 可变字段。
+- 注入字段声明为 `private final`，通过构造器注入。
+- 不把 Entity、可变集合或第三方 SDK 对象保存在 singleton Bean 的共享字段中。
+- 一个类只承担一个明确职责；当 Controller、Service 或 Gateway 同时承担协议解析、业务决策、持久化和第三方调用时，应拆分。
+
+### 5.7 方法与控制流
+
+- 一个方法只完成一个可描述的任务。出现多层阶段、多个外部副作用或难以命名的代码块时提取 private helper 或独立 Service。
+- 优先使用 guard clause / early return 降低嵌套；正常主路径保持从上到下可读。
+- 嵌套超过三层时重新评估结构，不能继续堆叠 `if/for/try`。
+- 公开 Service 方法在入口校验关键参数和权限；深层 helper 不重复散落同一校验。
+- 禁止用含义不明的多个 boolean 参数控制流程；使用 enum、配置对象或具名方法。
+- 不在 getter、DTO 转换器、`toString()`、`equals()`、`hashCode()` 中执行数据库、网络或消息发送副作用。
+- Stream 适用于清晰的映射、过滤、分组；包含异常处理、状态修改或复杂分支时使用普通循环。
+- switch 处理 enum 或 sealed hierarchy 时尽量穷举分支；不要用无意义 default 吞掉未来状态。
+- 批量数据避免循环内逐条远程调用或 SQL 查询。优先批量接口，并为无法避免的 N+1 写明原因。
+- 不在循环中创建可复用的重型客户端、ObjectMapper、正则表达式或线程池。
+- 外部调用明确设置超时、重试和幂等策略；重试只用于可安全重放的操作。
+
+### 5.8 Lombok、不可变性与空值
+
+- `record` 是不可变 DTO 的默认选择，不再叠加 Lombok `@Data`、`@Value` 或手写 getter。
+- `@Data` 只用于当前需要 JavaBean 可变性的 Entity、ConfigurationProperties 或历史可变 VO；普通 Service/Controller 禁止使用。
+- `@Builder` 用于字段较多且确实提升可读性的内部 Event/VO；简单两三个字段的 DTO 直接使用 record 构造器。
+- 禁止使用 `@SneakyThrows` 隐藏受检异常；显式处理、转换或向上声明。
+- 不使用 Lombok `val` / `var`；局部变量可以使用 JDK `var`，但右侧类型必须一眼可见且不能损失领域语义。
+- 构造完成后不再变化的字段声明为 `final`；不要为了机械追求 final 给所有局部变量增加噪音。
+- 集合字段优先使用接口类型 `List/Set/Map`，不要把 `ArrayList/HashMap` 暴露为 API 类型。
+- 方法不返回 null 集合、数组或 Stream。返回 `List.of()`、`Set.of()` 或空 Stream。
+- 不在 Entity、Request/Response 或配置字段中使用 `Optional`；Optional 只用于确实表达“查找结果可能不存在”的返回值，并保持同一层风格一致。
+- 比较 boxed 数值或可空对象使用 `Objects.equals()`；不要依赖 `Long/Integer` 的 `==` 缓存行为。
+- 字符串空白判断使用 `isBlank()` 或 Spring `StringUtils.hasText()`，不要只判断 `isEmpty()`。
+- 对外返回集合时避免泄漏内部可变集合；根据所有权使用 `List.copyOf()` 或新集合。
+
+### 5.9 数值、金额与时间
+
+- 金额禁止使用 `float` / `double`。
+- Stripe 金额沿用最小货币单位 `Long` 并同时保留 currency；需要小数运算的业务金额使用 `BigDecimal`，显式指定舍入规则。
+- 分页 limit、文件大小、重试次数等外部输入必须设上下限，不能只信任前端校验。
+- 数据库存储和后端传输时间优先使用 `OffsetDateTime`；只表示日期时使用 `LocalDate`。
+- Unix 时间戳必须在名称或 JavaDoc 中写明 seconds / millis，不能只写 `timestamp`。
+- 到期、每日额度、重试窗口等时间敏感逻辑较复杂时注入 `Clock`，让测试不依赖真实当前时间。
+- 跨时区业务先明确业务时区；不能隐式依赖服务器默认时区后又与 UTC 事件比较。
+
+### 5.10 错误与日志
 
 - 可预期业务失败使用 `BusinessException(ResultCode)`。
 - 新业务错误在 `ResultCode` 中分配所属模块号段，不复用语义不符的错误码。
@@ -109,6 +249,21 @@ Nook 是一个 Maven 多模块后端加独立 Vue SPA：
 - 日志使用参数化占位符，不字符串拼接。
 - 日志必须包含定位所需的稳定标识，但不得记录 Token、密码、API Key、Webhook secret、完整请求体或银行卡数据。
 - 对外错误信息不能暴露堆栈、SQL、第三方密钥或内部网络地址。
+
+### 5.11 Java 修改自检
+
+每次新增或修改 Java 文件后检查：
+
+- [ ] package 全小写且位于正确模块/分层。
+- [ ] 类型 PascalCase，方法/字段 lowerCamelCase，常量 UPPER_SNAKE_CASE。
+- [ ] 没有 wildcard import、未使用 import 和无必要的全限定类名。
+- [ ] Controller 只做协议适配，Service 承担业务，Mapper 只做持久化。
+- [ ] 注入字段为 `private final`，没有字段注入和 singleton 可变请求状态。
+- [ ] DTO/Entity 类型选择符合 record 与 MyBatis-Flex 约束。
+- [ ] null、集合、金额、时间和单位表达明确。
+- [ ] 权限、事务、并发、幂等、重试和外部副作用边界已覆盖。
+- [ ] 没有 Secret、完整 payload、`System.out` 或吞异常。
+- [ ] 相关测试、目标模块构建和 `git diff --check` 已通过。
 
 ## 6. API 与身份规范
 
