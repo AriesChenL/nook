@@ -61,9 +61,15 @@ scripts\observability\run-service.ps1 nook-pay
 
 入口：
 
-- SkyWalking UI：<http://localhost:8088>
+- SkyWalking Booster UI（原生 SkyWalking Agent 数据）：<http://localhost:8088>
+- OpenTelemetry Trace（Zipkin Lens）：<http://localhost:8088/zipkin/>
 - OAP HTTP / GraphQL：<http://localhost:12800>
 - OAP OTLP/gRPC：`localhost:11800`
+
+Nook 使用 OpenTelemetry Agent，上报的 trace 由 OAP 转换为 Zipkin 数据模型。因此查看
+Nook 服务与链路时应进入 `/zipkin/`，再按 `serviceName`（例如 `nook-gateway`）查询。
+Booster UI 的“常规服务”仪表盘只查询原生 SkyWalking 数据模型，显示 `No Data` 不代表
+OTLP trace 没有进入 OAP。
 
 ## 启动脚本行为
 
@@ -109,11 +115,11 @@ curl --fail http://localhost:8088/
 curl --fail http://localhost:8081/actuator/health
 ```
 
-在 SkyWalking UI 中选择对应时间窗口，应看到 `nook-auth` 服务及 `/actuator/health` trace。跨服务验证应通过网关访问一个会触发 Feign/HTTP 下游调用的接口，并确认 trace context 连成一条链路。
+在 Zipkin Lens 中按 `serviceName=nook-auth` 查询，应看到 `/actuator/health` trace。跨服务验证应通过网关访问一个会触发 Feign/HTTP 下游调用的接口，并确认 trace context 连成一条链路。
 
 ## 故障排查
 
-- UI 能打开但没有 trace：确认 Java 服务是通过 `run-service` 启动，检查 `OTEL_EXPORTER_OTLP_ENDPOINT`，并确认 OAP 的 `receiver-zipkin` / `query-zipkin` 已启用。
+- UI 能打开但没有 trace：先确认打开的是 `/zipkin/` 而不是 Booster UI 的“常规服务”仪表盘；再确认 Java 服务是通过 `run-service` 启动，检查 `OTEL_EXPORTER_OTLP_ENDPOINT`，并确认 OAP 的 `receiver-zipkin` / `query-zipkin` 已启用。
 - Agent 报 404/协议错误：确认 `OTEL_EXPORTER_OTLP_PROTOCOL=grpc` 且端口是 `11800`，不要把 OTel 2.x 默认 HTTP 协议直接发到 gRPC 端口。
 - OAP 重启循环：检查 `skywalking-db-init` 日志、`skywalking` 数据库是否存在，以及 OAP JDBC 配置。
 - 服务名全是默认值：不要直接执行裸 `./mvnw spring-boot:run`；使用 `run-service` 或显式设置 `OTEL_SERVICE_NAME`。
