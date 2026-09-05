@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把 docs/nacos/nook-shared.yml 发布到 Nacos（dataId=nook-shared.yml, group=DEFAULT_GROUP, type=yaml）。
+# 把 docs/nacos/nook-shared.yml 通过 Nacos 3 Admin API 发布到配置中心。
 #
 # 用法:
 #   scripts/nacos/push-shared-config.sh                      # 本地默认 http://localhost:8848，无鉴权
@@ -16,17 +16,20 @@ GROUP="DEFAULT_GROUP"
 
 [ -f "$FILE" ] || { echo "找不到 $FILE" >&2; exit 1; }
 
-args=(--fail --silent --show-error -X POST "$NACOS_ADDR/nacos/v1/cs/configs"
+args=(--fail --silent --show-error -X POST "$NACOS_ADDR/nacos/v3/admin/cs/config"
   --data-urlencode "dataId=$DATA_ID"
-  --data-urlencode "group=$GROUP"
+  --data-urlencode "groupName=$GROUP"
+  --data-urlencode "namespaceId=public"
   --data-urlencode "type=yaml"
   --data-urlencode "content@$FILE")
-[ -n "${NACOS_TOKEN:-}" ] && args+=(--data-urlencode "accessToken=$NACOS_TOKEN")
+[ -n "${NACOS_TOKEN:-}" ] && args+=(-H "accessToken: $NACOS_TOKEN")
 
 echo "发布 $DATA_ID@$GROUP → $NACOS_ADDR ..."
-if [ "$(curl "${args[@]}")" = "true" ]; then
+response="$(curl "${args[@]}")"
+compact_response="$(printf '%s' "$response" | tr -d '[:space:]')"
+if [[ "$compact_response" == *'"code":0'* && "$compact_response" == *'"data":true'* ]]; then
   echo "OK"
 else
-  echo "发布失败（Nacos 未就绪 / 鉴权？）" >&2
+  echo "发布失败（Nacos 未就绪 / Admin API 鉴权？）：$response" >&2
   exit 1
 fi

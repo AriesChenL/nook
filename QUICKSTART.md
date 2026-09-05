@@ -45,6 +45,17 @@ docker compose ps        # 看 STATUS 都是 Up / healthy
 
 > Windows 也可用脚本：`nook.bat up`（封装了 `docker compose up` + 下一步的 Nacos 配置推送）。
 
+### 可选：启动 SkyWalking 链路追踪
+
+普通 `docker compose up -d` 不启动观测组件。需要链路追踪时：
+
+```bash
+docker compose --profile observability up -d
+scripts/observability/setup-otel-agent.sh
+```
+
+之后用 `scripts/observability/run-service.sh nook-auth` 等命令启动 Java 服务。Windows 使用 `nook.bat observe` 和对应 PowerShell 脚本。完整说明见 [`docs/observability.md`](docs/observability.md)。
+
 ---
 
 ## 3.5. 推送 Nacos 共享配置（必做）
@@ -52,7 +63,7 @@ docker compose ps        # 看 STATUS 都是 Up / healthy
 DB / Redis / RabbitMQ 口令、JWT 密钥、RustFS / DeepSeek / Stripe 凭据统一放在 **Nacos 共享配置 `nook-shared.yml`**，各服务启动时加载。**没有它服务起不来。**
 
 ```bash
-scripts/nacos/push-shared-config.sh      # 默认 http://localhost:8848，无鉴权
+scripts/nacos/push-shared-config.sh      # 默认 http://localhost:8848，通过 Nacos 3 Admin API 发布
 ```
 
 内容即 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)，每项都是 `${环境变量:开发默认值}`——本地不设任何环境变量即用默认值，可直接跑。改了配置重新执行脚本即可（`refresh: true` 会热更新）。
@@ -84,10 +95,10 @@ export JAVA_HOME=/path/to/jdk-25       # macOS / Linux
 # set JAVA_HOME=D:\Java\jdk-25         # Windows
 ```
 
-先编译一次（跳过测试更快）：
+先安装一次当前 reactor 制品（后续每个服务由独立 Maven 进程启动，必须能从本地仓库解析到同版本的 `nook-common` / `nook-starter`）：
 
 ```bash
-./mvnw -DskipTests package             # Windows: mvnw.cmd
+./mvnw -DskipTests install             # Windows: mvnw.cmd
 ```
 
 按**固定顺序**启动（`nook-auth` 先注册到 Nacos，其余依赖它）：
@@ -99,6 +110,17 @@ export JAVA_HOME=/path/to/jdk-25       # macOS / Linux
 ./mvnw -pl nook-im      spring-boot:run
 ./mvnw -pl nook-ai      spring-boot:run
 ./mvnw -pl nook-pay     spring-boot:run
+```
+
+需要把 trace 上报到 SkyWalking 时，用下面的脚本替代上述裸 Maven 命令：
+
+```bash
+scripts/observability/run-service.sh nook-auth
+scripts/observability/run-service.sh nook-gateway
+scripts/observability/run-service.sh nook-user
+scripts/observability/run-service.sh nook-im
+scripts/observability/run-service.sh nook-ai
+scripts/observability/run-service.sh nook-pay
 ```
 
 > 每个服务一个终端；或在 IDE 里分别运行各模块的 `*Application`。
@@ -136,6 +158,7 @@ pnpm dev
 | RabbitMQ | http://localhost:15672 | `nook` / `nook123` |
 | RustFS（对象存储） | http://localhost:9001/rustfs/console | `rustfsadmin` / `rustfssecret` |
 | Nacos | http://localhost:8849 | 已关鉴权 |
+| SkyWalking | http://localhost:8088 | 使用 `observability` profile 时可用 |
 
 ---
 

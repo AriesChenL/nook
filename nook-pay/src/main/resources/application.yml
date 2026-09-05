@@ -5,8 +5,11 @@ spring:
   application:
     name: nook-pay
 
-  # DataSource / Stripe 密钥来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
+  # DataSource / Stripe 密钥来自 Nacos 共享配置 nook-shared.yml。
   # 本地也可用 --spring.profiles.active=local 加载 application-local.yml 里的 test key（已 gitignore）。
+  config:
+    import:
+      - nacos:nook-shared.yml?group=DEFAULT_GROUP&refreshEnabled=true
 
   # Flyway：迁移脚本在 nook-common 的 classpath:db/migration
   flyway:
@@ -20,13 +23,6 @@ spring:
         server-addr: ${NACOS_ADDR:localhost:8848}
       config:
         server-addr: ${NACOS_ADDR:localhost:8848}
-        file-extension: yml
-        import-check:
-          enabled: false
-        shared-configs:
-          - data-id: nook-shared.yml
-            group: DEFAULT_GROUP
-            refresh: true
 
 mybatis-flex:
   global-config:

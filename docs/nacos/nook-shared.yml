@@ -5,7 +5,7 @@
 #   format : YAML
 #
 # 加载方：nook-gateway / nook-auth / nook-user / nook-im / nook-ai / nook-pay
-#   （spring.cloud.nacos.config.shared-configs 声明，refresh: true 支持热更新）
+#   （spring.config.import 声明，refreshEnabled=true 支持热更新）
 #
 # 每项都是 ${ENV_VAR:开发默认值}：
 #   - 本地：不设环境变量即用开发默认值（配合 nook.bat / docker-compose 的默认口令）

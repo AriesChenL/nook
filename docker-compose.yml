@@ -17,6 +17,11 @@ services:
       - pg-data:/var/lib/postgresql
       # 数据库 schema 改由 Flyway 在应用启动时管理（迁移脚本在 nook-common/db/migration）。
       # 不再用 initdb.d（它只在空卷首启时跑一次、不跟踪增量）。
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nook -d nook"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis:
     image: redis:latest
@@ -35,6 +40,8 @@ services:
     environment:
       MODE: standalone
       NACOS_AUTH_ENABLE: "false"
+      NACOS_AUTH_ADMIN_ENABLE: "false"
+      NACOS_AUTH_CONSOLE_ENABLE: "false"
       NACOS_AUTH_TOKEN: SecretKey012345678901234567890123456789012345678901234567890123456789
       NACOS_AUTH_IDENTITY_KEY: nacos
       NACOS_AUTH_IDENTITY_VALUE: nacos
@@ -61,6 +68,73 @@ services:
       - "15672:15672"   # 管理控制台 WebUI
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+
+  # SkyWalking 独立数据库初始化：兼容已存在的 pg-data volume，不依赖 initdb.d 首次启动语义。
+  skywalking-db-init:
+    profiles: ["observability"]
+    image: postgres:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: nook
+      PGPASSWORD: nook123
+      PGDATABASE: postgres
+    volumes:
+      - ./scripts/observability/init-skywalking-db.sh:/opt/nook/init-skywalking-db.sh:ro
+    command: ["/bin/sh", "/opt/nook/init-skywalking-db.sh"]
+
+  # SkyWalking OAP：接收 OpenTelemetry Agent 的 OTLP/gRPC trace，生成拓扑和链路指标。
+  skywalking-oap:
+    profiles: ["observability"]
+    image: apache/skywalking-oap-server:10.4.0
+    container_name: nook-skywalking-oap
+    restart: unless-stopped
+    depends_on:
+      skywalking-db-init:
+        condition: service_completed_successfully
+    environment:
+      SW_STORAGE: postgresql
+      SW_JDBC_URL: jdbc:postgresql://postgres:5432/skywalking   # 走 compose 内网服务名 postgres
+      SW_DATA_SOURCE_USER: nook
+      SW_DATA_SOURCE_PASSWORD: nook123
+      SW_HEALTH_CHECKER: default
+      SW_OTEL_RECEIVER: default
+      SW_OTEL_RECEIVER_ENABLED_HANDLERS: otlp-metrics,otlp-logs,otlp-traces
+      SW_RECEIVER_ZIPKIN: default
+      SW_ZIPKIN_HTTP_COLLECTOR_ENABLED: "false"
+      SW_QUERY_ZIPKIN: default
+      SW_CORE_RECORD_DATA_TTL: 3
+      SW_CORE_METRICS_DATA_TTL: 7
+      JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "11800:11800"   # gRPC：agent 上报端口（宿主机上的 Java 服务连这个）
+      - "12800:12800"   # HTTP/GraphQL：供 UI 查询
+    expose:
+      - "9412"          # Zipkin query：供 SkyWalking UI 在 compose 内网查询 OTel trace
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/12800; printf 'GET /healthcheck HTTP/1.0\r\n\r\n' >&3; grep -q '200 OK' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # SkyWalking UI：拓扑图 / 链路 / 服务指标 控制台
+  skywalking-ui:
+    profiles: ["observability"]
+    image: apache/skywalking-ui:10.4.0
+    container_name: nook-skywalking-ui
+    restart: unless-stopped
+    depends_on:
+      skywalking-oap:
+        condition: service_healthy
+    environment:
+      SW_OAP_ADDRESS: http://skywalking-oap:12800   # 走 compose 内网服务名访问 OAP
+      SW_ZIPKIN_ADDRESS: http://skywalking-oap:9412
+    ports:
+      - "8088:8080"   # UI 控制台（宿主 8080 被网关占用，故映射到 8088）
 
   # RustFS：S3 兼容对象存储，IM 文件/图片/音视频直传
   rustfs:

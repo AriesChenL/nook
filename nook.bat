@@ -6,6 +6,7 @@ if /i "%~1"=="up" goto start
 if /i "%~1"=="down" goto stop
 if /i "%~1"=="status" goto status
 if /i "%~1"=="reset" goto reset
+if /i "%~1"=="observe" goto observability
 goto menu
 
 :menu
@@ -17,6 +18,7 @@ echo    1. Start   (docker up + Nacos config)
 echo    2. Stop    (docker down)
 echo    3. Status  (check services)
 echo    4. Reset   (down -v, wipe data)
+echo    5. Observe (start SkyWalking + prepare OTel agent)
 echo    0. Exit
 echo  ==================================
 echo.
@@ -25,6 +27,7 @@ if "%choice%"=="1" goto start
 if "%choice%"=="2" goto stop
 if "%choice%"=="3" goto status
 if "%choice%"=="4" goto reset
+if "%choice%"=="5" goto observability
 if "%choice%"=="0" exit /b 0
 goto menu
 
@@ -50,14 +53,15 @@ echo        PostgreSQL ready.
 echo.
 echo [3/4] Waiting for Nacos, then pushing shared config...
 :nacos_wait
-curl -sf http://localhost:8848/nacos/v1/console/health/readiness >nul 2>&1
+curl -sf http://localhost:8848/nacos/v1/ns/operator/metrics >nul 2>&1
 if %errorlevel% neq 0 (
     timeout /t 2 /nobreak >nul
     goto nacos_wait
 )
-curl -sf -X POST "http://localhost:8848/nacos/v1/cs/configs" ^
+curl -sf -X POST "http://localhost:8848/nacos/v3/admin/cs/config" ^
   --data-urlencode "dataId=nook-shared.yml" ^
-  --data-urlencode "group=DEFAULT_GROUP" ^
+  --data-urlencode "groupName=DEFAULT_GROUP" ^
+  --data-urlencode "namespaceId=public" ^
   --data-urlencode "type=yaml" ^
   --data-urlencode "content@docs\nacos\nook-shared.yml" >nul
 if %errorlevel% neq 0 (
@@ -80,7 +84,7 @@ goto end
 :stop
 echo.
 echo Stopping all containers...
-docker compose down
+docker compose --profile observability down
 echo Done.
 goto end
 
@@ -93,8 +97,60 @@ if /i not "%confirm%"=="YES" (
     goto end
 )
 echo Resetting...
-docker compose down -v
+docker compose --profile observability down -v
 echo All containers and volumes removed.
+goto end
+
+:observability
+echo.
+echo [1/4] Starting infrastructure + SkyWalking...
+docker compose --profile observability up -d
+if %errorlevel% neq 0 (
+    echo [ERROR] SkyWalking startup failed!
+    goto end
+)
+
+echo.
+echo [2/4] Waiting for Nacos, then pushing shared config...
+:observe_nacos_wait
+curl -sf http://localhost:8848/nacos/v1/ns/operator/metrics >nul 2>&1
+if %errorlevel% neq 0 (
+    timeout /t 2 /nobreak >nul
+    goto observe_nacos_wait
+)
+curl -sf -X POST "http://localhost:8848/nacos/v3/admin/cs/config" ^
+  --data-urlencode "dataId=nook-shared.yml" ^
+  --data-urlencode "groupName=DEFAULT_GROUP" ^
+  --data-urlencode "namespaceId=public" ^
+  --data-urlencode "type=yaml" ^
+  --data-urlencode "content@docs\nacos\nook-shared.yml" >nul
+if %errorlevel% neq 0 (
+    echo [ERROR] push nook-shared.yml failed!
+    goto end
+)
+echo        nook-shared.yml published.
+
+echo.
+echo [3/4] Waiting for SkyWalking OAP...
+:oap_wait
+curl -sf http://localhost:12800/healthcheck >nul 2>&1
+if %errorlevel% neq 0 (
+    timeout /t 2 /nobreak >nul
+    goto oap_wait
+)
+echo        SkyWalking OAP ready.
+
+echo.
+echo [4/4] Preparing OpenTelemetry Java Agent...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\observability\setup-otel-agent.ps1
+if %errorlevel% neq 0 (
+    echo [ERROR] OpenTelemetry Agent setup failed!
+    goto end
+)
+echo.
+echo  SkyWalking UI: http://localhost:8088
+echo  Start an observed service, for example:
+echo    powershell -ExecutionPolicy Bypass -File scripts\observability\run-service.ps1 nook-auth
 goto end
 
 :status
@@ -105,7 +161,7 @@ goto end
 :print_status
 echo  Service            Port    Status
 echo  ----------------   -----   ------
-for %%s in (nook-postgres:5432,nook-redis:6379,nook-nacos:8848,nook-rabbitmq:5672,nook-rustfs:9000) do (
+for %%s in (nook-postgres:5432,nook-redis:6379,nook-nacos:8848,nook-rabbitmq:5672,nook-rustfs:9000,nook-skywalking-oap:12800,nook-skywalking-ui:8088) do (
     for /f "tokens=1,2 delims=:" %%a in ("%%s") do (
         for /f "tokens=*" %%r in ('docker inspect -f "{{.State.Status}}" %%a 2^>nul ^|^| echo not-found') do (
             set "name=%%a                    "

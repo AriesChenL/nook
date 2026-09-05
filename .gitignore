@@ -62,3 +62,8 @@ application-*-local.yaml
 ### Local notes (do not commit) ###
 PROGRESS.md
 BACKEND_PROGRESS.md
+
+### Local observability runtimes (downloaded, do not commit) ###
+/.runtime/
+/opentelemetry-javaagent.jar
+/skywalking-agent/

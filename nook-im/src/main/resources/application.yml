@@ -5,7 +5,10 @@ spring:
   application:
     name: nook-im
 
-  # DataSource / Redis / RabbitMQ / 对象存储凭据来自 Nacos 共享配置 nook-shared.yml（见下方 shared-configs）。
+  # DataSource / Redis / RabbitMQ / 对象存储凭据来自 Nacos 共享配置 nook-shared.yml。
+  config:
+    import:
+      - nacos:nook-shared.yml?group=DEFAULT_GROUP&refreshEnabled=true
 
   # Flyway：迁移脚本在 nook-common 的 classpath:db/migration（已有库采纳现状为基线）
   flyway:
@@ -19,13 +22,6 @@ spring:
         server-addr: ${NACOS_ADDR:localhost:8848}
       config:
         server-addr: ${NACOS_ADDR:localhost:8848}
-        file-extension: yml
-        import-check:
-          enabled: false
-        shared-configs:
-          - data-id: nook-shared.yml
-            group: DEFAULT_GROUP
-            refresh: true
 
 mybatis-flex:
   global-config:

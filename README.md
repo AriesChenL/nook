@@ -48,6 +48,7 @@
 - **服务注册/配置**：Nacos
 - **服务间调用**：OpenFeign（`nook-im` → `nook-user` 聚合成员资料、好友列表）
 - **实时推送**：WebSocket（单机本地直推；多实例时经 RabbitMQ **广播 exchange** 分发保证一致）
+- **链路追踪**：OpenTelemetry Java Agent → OTLP/gRPC → SkyWalking OAP + UI
 
 | 模块 | 职责 |
 |---|---|
@@ -75,6 +76,7 @@
 - 对象存储 RustFS（S3 兼容，IM 文件消息预签名直传，AWS SDK v2）
 - JWT：jjwt 0.12.6 · 密码：BCrypt
 - AI：agentscope-harness 2.0.2（单例 HarnessAgent + Gateway/Channel）· DeepSeek `deepseek-v4-flash-0731`（OpenAI 兼容）
+- 可观测：OpenTelemetry Java Agent 2.31.1 · SkyWalking OAP/UI 10.4.0（本地可选 profile）
 
 **前端（nook-web）**
 - Vue 3.5 · Vite · TypeScript · Pinia · Vue Router
@@ -158,8 +160,8 @@ nook.bat reset    :: 清库重来（down -v + 删数据）
 set JAVA_HOME=D:\Java\jdk-25.0.2      # Windows
 export JAVA_HOME=/path/to/jdk-25       # *nix
 
-# 编译全部
-./mvnw.cmd -DskipTests package
+# 安装当前多模块制品（独立启动各服务前必须执行，避免命中 .m2 中的旧版 nook-starter）
+./mvnw.cmd -DskipTests install
 
 # 分别运行各服务（或在 IDE 里跑各模块的 *Application）
 ./mvnw.cmd -pl nook-auth spring-boot:run
@@ -196,6 +198,8 @@ pnpm dev        # http://localhost:5173
 | Nacos | 8848 | |
 | RustFS | 9000 / 9001 | S3 API / 控制台（rustfsadmin / rustfssecret） |
 | RabbitMQ | 5672 / 15672 | AMQP / 管理台（nook / nook123） |
+| SkyWalking OAP | 11800 / 12800 | OTLP/gRPC / HTTP GraphQL（可选） |
+| SkyWalking UI | 8088 | 链路、拓扑和服务指标（可选） |
 
 ---
 
@@ -283,7 +287,7 @@ pnpm dev        # http://localhost:5173
 
 ## 配置说明
 
-- **配置集中在 Nacos**：DB / Redis / RabbitMQ 口令、`nook.jwt.secret`、RustFS / DeepSeek / Stripe 凭据全部放 Nacos 共享配置 **`nook-shared.yml`**（dataId=`nook-shared.yml`, group=`DEFAULT_GROUP`），6 个服务经 `spring.cloud.nacos.config.shared-configs` 加载（`refresh: true` 热更新）。**没有它服务起不来。**
+- **配置集中在 Nacos**：DB / Redis / RabbitMQ 口令、`nook.jwt.secret`、RustFS / DeepSeek / Stripe 凭据全部放 Nacos 共享配置 **`nook-shared.yml`**（dataId=`nook-shared.yml`, group=`DEFAULT_GROUP`），6 个服务经标准 `spring.config.import` 加载（`refreshEnabled=true` 热更新）。**没有它服务起不来。**
   - 发布：`scripts/nacos/push-shared-config.sh`（`nook.bat up` 自动执行一次）；内容见 [`docs/nacos/nook-shared.yml`](docs/nacos/nook-shared.yml)。
   - 每项均 `${环境变量:开发默认值}`：本地不设环境变量即用默认值直接跑；生产在 Nacos 所在环境设环境变量，或直接改 `nook-shared.yml` 的值后重推。
   - 各服务 `application.yml` 只保留非敏感、单服务的配置（端口、路由、mq 开关、AI 模型/额度、Stripe 套餐映射与回跳地址等）。
@@ -293,6 +297,7 @@ pnpm dev        # http://localhost:5173
 - **Nacos 3.x**：`docker-compose` 已配 `NACOS_AUTH_*` 三件套（即使关认证也要给）。
 - **AI / Stripe 密钥**：`nook-shared.yml` 里默认为空。Stripe 生产环境优先使用最小权限 `rk_` restricted key，环境间使用独立密钥；详见 [Stripe 上线清单](docs/stripe/go-live.md)。
 - **对象存储**：`docker-compose` 的 `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY` 须与 `nook-shared.yml` 的 `nook.storage.*` 一致；bucket 由 `nook-im` / `nook-ai` 启动自建。
+- **本地链路追踪**：使用 Compose `observability` profile 和 OpenTelemetry 启动脚本，详见 [`docs/observability.md`](docs/observability.md)。
 
 ---
 
@@ -329,7 +334,9 @@ nook/
 ├─ sql/             schema 初始化（01_auth / 02_user / 03_im / 04_im 文件迁移 / 05_ai）
 ├─ scripts/rustfs/  RustFS 初始化（bucket + 公开读 + CORS）
 ├─ scripts/nacos/   push-shared-config.sh（发布 nook-shared.yml 到 Nacos）
+├─ scripts/observability/  OTel Agent 下载校验、服务启动和 SkyWalking DB 初始化
 ├─ docs/nacos/      nook-shared.yml：DB/Redis/MQ 口令 + JWT + RustFS/DeepSeek/Stripe 凭据
+├─ docs/observability.md  本地链路追踪架构、启动与排障
 ├─ docker-compose.yml
 └─ nook.bat         基础设施一键启停
 ```
@@ -349,7 +356,7 @@ nook/
 - [x] **会话列表去 N+1**：`ConversationVO` 内联 `lastMessage`（发送者脱敏 + 撤回屏蔽），前端不再逐会话拉最后一条
 - [x] **在线状态快照**：`GET /im/presence/online` 返回在线好友，前端进页面/每次 WS `ready` 后拉一次对齐（WS 只推跳变）
 - [x] **可观测**：业务服务接入 actuator 健康端点
-- [x] **配置/密钥全部收口 Nacos**：DB/Redis/RabbitMQ 口令 + JWT + RustFS/DeepSeek/Stripe 凭据 → `nook-shared.yml`（6 服务 `shared-configs` 加载）；`scripts/nacos/push-shared-config.sh` 一键发布；各项 `${env:dev默认}`，本地零环境变量可跑
+- [x] **配置/密钥全部收口 Nacos**：DB/Redis/RabbitMQ 口令 + JWT + RustFS/DeepSeek/Stripe 凭据 → `nook-shared.yml`（6 服务通过 `spring.config.import` 加载）；`scripts/nacos/push-shared-config.sh` 一键发布；各项 `${env:dev默认}`，本地零环境变量可跑
 - [ ] **离线推送**（APNs / FCM）
 
 ---

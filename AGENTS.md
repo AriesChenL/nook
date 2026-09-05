@@ -299,7 +299,7 @@ com.stripe.model.billingportal.Session portalSession = stripe.createBillingPorta
 
 配置按职责放置：
 
-- 跨服务或敏感配置放 `docs/nacos/nook-shared.yml`，由各服务 `shared-configs` 加载。
+- 跨服务或敏感配置放 `docs/nacos/nook-shared.yml`，由各服务通过 `spring.config.import` 加载；不要恢复已移除的 bootstrap/shared-configs 方式。
 - 端口、路由、模块业务开关和非敏感默认值放各模块 `application.yml`。
 - 环境差异通过 `${ENV_VAR:dev-default}` 表达。
 - 新增共享配置时同步更新 Nacos 模板、导入脚本说明和 Quick Start。
@@ -419,11 +419,16 @@ git diff --check
 
 ## 12. 可观测性
 
+- Nook Java 服务统一使用 OpenTelemetry Java Agent，通过 OTLP/gRPC `:11800` 上报 SkyWalking OAP；不要挂 SkyWalking native Java Agent。
+- 同一 JVM 禁止同时挂两个 APM/字节码增强 agent。
+- Agent JAR 和完整解压目录属于本地运行资产，只能放 `.runtime/` 或其他 gitignored 目录，禁止提交仓库。
+- 使用 `scripts/observability/run-service.*` 启动需要 trace 的本地服务，确保 service name 与模块名一致。
 - Actuator 至少保留 health/info；新增业务指标时同步开放相应 endpoint 或导出方式。
 - 指标命名使用 `nook.<module>.<business>`，tag 只能使用低基数字段，禁止 userId、sessionId、eventId。
 - 第三方调用日志记录渠道 request ID、业务对象 ID 和结果，不记录 Secret 或完整 payload。
 - 重试、fail-open、幂等跳过和降级必须有可检索日志或指标，避免静默失败。
 - 健康检查区分“应用存活”和“关键外部配置/依赖可用”，不要用一个永远 UP 的假检查。
+- 修改 OAP、UI、OTel Agent 或传输协议时同步更新 `docs/observability.md` 并执行真实上报验证。
 
 ## 13. AWS 任务规范
 
